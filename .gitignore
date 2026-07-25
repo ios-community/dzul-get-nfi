@@ -1,0 +1,11 @@
+benchmark_dzul_get_nfi.ipynb
+/datasets
+generate_notebook.py
+/target
+problem.txt
+source.txt
+/results
+scripts/dzul_get_nfi.ipynb
+scripts/.venv/
+scripts/.ruff_cache/
+scripts/__pycache__/

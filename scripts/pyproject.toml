@@ -1,0 +1,54 @@
+[project]
+name = "dzul-get-nfi-bench"
+version = "0.1.0"
+description = "Benchmarking scripts for Dzul's GET-NFI TSP solver"
+requires-python = ">=3.10"
+dependencies = [
+    "psutil",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "numpy",
+    "jinja2",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "B905",
+    "C901",
+    "COM812",
+    "CPY001",
+    "D100",
+    "D104",
+    "E501",
+    "FBT003",
+    "INP001",
+    "ISC001",
+    "ISC003",
+    "N806",
+    "PERF203",
+    "PLC0415",
+    "PLR0912",
+    "PLR0915",
+    "PLR2004",
+    "PLR1730",
+    "PLW1510",
+    "PT011",
+    "RUF012",
+    "RUF059",
+    "S110",
+    "S602",
+    "S603",
+    "S607",
+    "SIM105",
+    "SIM108",
+    "T201",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**" = ["ANN"]

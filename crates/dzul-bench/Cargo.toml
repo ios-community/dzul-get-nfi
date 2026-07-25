@@ -1,0 +1,23 @@
+[package]
+name = "dzul-bench"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96.0"
+authors = ["Dzulkifli Anwar"]
+description = "CLI runner, dataset fetcher, and benchmarks for dzul-core."
+
+[dependencies]
+dzul-core = { path = "../dzul-core", features = ["parallel"] }
+libm = "0.2.16"
+ureq = "3.3.0"
+
+[dev-dependencies]
+divan = "0.1.21"
+
+[[bin]]
+name = "dzul-get-nfi"
+path = "src/main.rs"
+
+[[bench]]
+name = "solver_benches"
+harness = false
