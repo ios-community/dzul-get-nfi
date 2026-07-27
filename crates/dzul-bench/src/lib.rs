@@ -229,7 +229,11 @@ fn get_w_fast(graph: &dzul_core::Graph<'_>, u: usize, v: usize) -> u64 {
 
     // O(1) direct offset for standard complete CSR graphs
     if end - start == graph.nodes.len() - 1 {
-        let idx = if v < u { start + v } else { start + v - 1 };
+        let idx = if v < u {
+            start + v
+        } else {
+            start.saturating_add(v).saturating_sub(1)
+        };
         if idx < end && graph.edges[idx].target == v as u32 {
             return graph.edges[idx].weight.0;
         }
@@ -320,6 +324,17 @@ pub fn solve_farthest_insertion(
                     min_dist_to_tour[i] = d;
                 }
             }
+        }
+    }
+
+    // Ensure all nodes are in the tour and close it
+    let mut visited = vec![false; n];
+    for &node in &tour {
+        visited[node as usize] = true;
+    }
+    for i in 0..n {
+        if !visited[i] {
+            tour.insert(tour.len() - 1, i as u32);
         }
     }
 
