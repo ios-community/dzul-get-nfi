@@ -220,6 +220,30 @@ pub fn solve_nearest_neighbor(graph: &dzul_core::Graph<'_>, start_node: u32) -> 
     (path, total_cost)
 }
 
+/// Fast O(1) edge weight lookup helper for complete CSR graphs.
+#[inline]
+fn get_w_fast(graph: &dzul_core::Graph<'_>, u: usize, v: usize) -> u64 {
+    let node_u = &graph.nodes[u];
+    let start = node_u.edge_start as usize;
+    let end = node_u.edge_end as usize;
+
+    // O(1) direct offset for standard complete CSR graphs
+    if end - start == graph.nodes.len() - 1 {
+        let idx = if v < u { start + v } else { start + v - 1 };
+        if idx < end && graph.edges[idx].target == v as u32 {
+            return graph.edges[idx].weight.0;
+        }
+    }
+
+    // Fallback linear scan if graph edges were reordered
+    for edge in &graph.edges[start..end] {
+        if edge.target == v as u32 {
+            return edge.weight.0;
+        }
+    }
+    u64::MAX
+}
+
 /// Farthest Insertion heuristic.
 ///
 /// Starting from a trivial tour (a single node), repeatedly inserts the
@@ -234,16 +258,8 @@ pub fn solve_farthest_insertion(
         return (Vec::new(), Weight(0));
     }
 
-    // Helper closure for O(1) average edge weight lookup
-    let get_w = |u: usize, v: usize| -> u64 {
-        let node = &graph.nodes[u];
-        for edge in &graph.edges[node.edge_start as usize..node.edge_end as usize] {
-            if edge.target == v as u32 {
-                return edge.weight.0;
-            }
-        }
-        u64::MAX
-    };
+    // Fast O(1) edge weight lookup closure
+    let get_w = |u: usize, v: usize| -> u64 { get_w_fast(graph, u, v) };
 
     let mut tour: Vec<u32> = vec![start_node, start_node];
     let mut in_tour = vec![false; n];
@@ -328,15 +344,7 @@ pub fn solve_clarke_wright_savings(
         return (vec![start_node, start_node], Weight(0));
     }
 
-    let get_w = |u: usize, v: usize| -> u64 {
-        let node = &graph.nodes[u];
-        for edge in &graph.edges[node.edge_start as usize..node.edge_end as usize] {
-            if edge.target == v as u32 {
-                return edge.weight.0;
-            }
-        }
-        u64::MAX
-    };
+    let get_w = |u: usize, v: usize| -> u64 { get_w_fast(graph, u, v) };
 
     // Calculate Savings: s(i, j) = d(depot, i) + d(depot, j) - d(i, j)
     let mut savings: Vec<(u64, u32, u32)> = Vec::with_capacity(n * (n - 1) / 2);
@@ -498,13 +506,8 @@ pub fn solve_random_tour(
 
 /// Looks up the weight of the edge `u -> v` in the graph.
 fn edge_weight(graph: &dzul_core::Graph<'_>, u: u32, v: u32) -> Option<Weight> {
-    let node_u = &graph.nodes[u as usize];
-    for edge in &graph.edges[node_u.edge_start as usize..node_u.edge_end as usize] {
-        if edge.target == v {
-            return Some(edge.weight);
-        }
-    }
-    None
+    let w = get_w_fast(graph, u as usize, v as usize);
+    if w == u64::MAX { None } else { Some(Weight(w)) }
 }
 
 #[cfg(test)]
