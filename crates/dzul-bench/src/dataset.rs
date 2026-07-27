@@ -3125,7 +3125,7 @@ pub fn get_dataset(name: &str) -> Option<Vec<(f64, f64)>> {
             return Some(coords);
         }
 
-    // 2. Hardcoded fallback FIRST for known instances (ensures 100% offline)
+    // 2. Hardcoded fallback FIRST for known small instances
     let hardcoded = match name {
         "eil51" => Some(EIL51_COORDS.to_vec()),
         "berlin52" => Some(BERLIN52_COORDS.to_vec()),
@@ -3150,27 +3150,26 @@ pub fn get_dataset(name: &str) -> Option<Vec<(f64, f64)>> {
         return Some(coords);
     }
 
-    // 3. Try online fetch for unknown instances (network optional)
+    // 3. Try fast GitHub Raw CDN mirror with strict 3-second timeout
+    let mirror_url = format!("https://raw.githubusercontent.com/mastqe/tsplib/master/{name}.tsp");
+    let agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(3)))
+        .build()
+        .into_agent();
+
+    if let Ok(mut response) = agent.get(&mirror_url).call()
+        && let Ok(content) = response.body_mut().read_to_string()
     {
-        let url = format!("http://comopt.ifi.uni-heidelberg.de/software/TSPLIB95/tsp/{name}.tsp");
-        if let Some(content) = ureq::get(&url)
-            .call()
-            .ok()
-            .and_then(|mut r| r.body_mut().read_to_string().ok())
-        {
-            let _ = fs::create_dir_all(cache_dir);
-            if let Ok(mut file) = fs::File::create(&cache_path) {
-                let _ = file.write_all(content.as_bytes());
-            }
-            if let Some(coords) = parse_tsplib_content(&content) {
-                return Some(coords);
-            }
+        let _ = fs::create_dir_all(cache_dir);
+        if let Ok(mut file) = fs::File::create(&cache_path) {
+            let _ = file.write_all(content.as_bytes());
+        }
+        if let Some(coords) = parse_tsplib_content(&content) {
+            return Some(coords);
         }
     }
 
-    // 4. Return None — never use synthetic coords as fallback for benchmark
-    //    instances with known optimal costs. Use [`get_synthetic_dataset`]
-    //    explicitly to request synthetic coordinates.
+    // 4. Return None if fetch fails or times out
     None
 }
 

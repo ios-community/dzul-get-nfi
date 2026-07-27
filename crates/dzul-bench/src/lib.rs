@@ -162,21 +162,18 @@ fn assert_tour_integrity(tour: &[u32], n: usize) {
     );
     let mut seen = vec![false; n];
     for &node in &tour[..n] {
-        assert!(
-            (node as usize) < n,
-            "node index {node} out of range 0..{n}"
-        );
+        assert!((node as usize) < n, "node index {node} out of range 0..{n}");
         assert!(!seen[node as usize], "duplicate node {node} in tour");
         seen[node as usize] = true;
     }
-    assert!(seen.iter().all(|&v| v), "tour does not cover all nodes 0..{n}");
+    assert!(
+        seen.iter().all(|&v| v),
+        "tour does not cover all nodes 0..{n}"
+    );
 }
 
 /// Nearest Neighbor baseline heuristic.
-pub fn solve_nearest_neighbor(
-    graph: &dzul_core::Graph<'_>,
-    start_node: u32,
-) -> (Vec<u32>, Weight) {
+pub fn solve_nearest_neighbor(graph: &dzul_core::Graph<'_>, start_node: u32) -> (Vec<u32>, Weight) {
     let n = graph.nodes.len();
     let mut path = Vec::with_capacity(n + 1);
     let mut visited = vec![false; n];
@@ -351,18 +348,21 @@ pub fn solve_clarke_wright_savings(
         if !route_endpoint[i as usize] || !route_endpoint[j as usize] {
             continue;
         }
+
         // Check that i and j are not in the same route already
         // by walking from i forward to start_node.
         let mut same_route = false;
         let mut cur = next_node[i as usize];
-        while cur != start_node {
+        let mut steps = 0;
+        while cur != start_node && steps < n {
             if cur == j {
                 same_route = true;
                 break;
             }
             cur = next_node[cur as usize];
+            steps += 1;
         }
-        if same_route {
+        if same_route || steps >= n {
             continue;
         }
 
@@ -465,7 +465,9 @@ pub fn solve_random_tour(
     // LCG PRNG for reproducibility (no extra deps).
     let mut state = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let mut rng = || {
-        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         state
     };
 
@@ -512,7 +514,11 @@ mod tests {
     #[test]
     fn test_fr_17_baseline_suite() {
         let (nodes, mut edges) = build_complete_4_node_graph();
-        let graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+        let graph = Graph {
+            nodes: &nodes,
+            edges: &mut edges,
+            is_directed: false,
+        };
         let n = graph.nodes.len();
 
         // Farthest Insertion: integrity asserted inside.
