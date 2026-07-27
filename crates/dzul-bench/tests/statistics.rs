@@ -143,7 +143,7 @@ fn solve_get_nfi(
 }
 
 /// Apply 2-Opt to a tour path.
-fn apply_2opt(nodes: &[Node], edges: &mut [Edge], n: usize, path: &mut Vec<u32>) -> Weight {
+fn apply_2opt(nodes: &[Node], edges: &mut [Edge], n: usize, path: &mut [u32]) -> Weight {
     let graph = Graph {
         nodes,
         edges,
@@ -302,7 +302,9 @@ fn test_group1_pure_constructive() {
     println!("{}", "-".repeat(104));
 
     for name in ALL_INSTANCES {
-        let Some(coords) = get_dataset(name) else { continue };
+        let Some(coords) = get_dataset(name) else {
+            continue;
+        };
         let n = coords.len();
         let (nodes, mut edges) = build_graph(&coords, false, DistanceMode::Euc2d);
         let opt = optimal_cost(name).unwrap_or(0);
@@ -310,15 +312,15 @@ fn test_group1_pure_constructive() {
             continue;
         }
 
-        let (nn_path, nn_cost) = run_nn(&nodes, &mut edges);
-        let (fi_path, fi_cost) = run_fi(&nodes, &mut edges);
-        let (cw_path, cw_cost) = run_cw(&nodes, &mut edges);
+        let (_nn_path, nn_cost) = run_nn(&nodes, &mut edges);
+        let (_fi_path, fi_cost) = run_fi(&nodes, &mut edges);
+        let (_cw_path, cw_cost) = run_cw(&nodes, &mut edges);
         let nfi_start = Instant::now();
         let nfi_result = solve_get_nfi(&nodes, &mut edges, n, false);
         let nfi_elapsed_ms = nfi_start.elapsed().as_millis();
 
         let nfi_cost = nfi_result.as_ref().map(|c| c.1).unwrap_or(Weight(0));
-        let nfi_path: Vec<u32> = nfi_result.as_ref().map(|c| c.0.clone()).unwrap_or_default();
+        let _nfi_path: Vec<u32> = nfi_result.as_ref().map(|c| c.0.clone()).unwrap_or_default();
 
         let nn_int = to_int(nn_cost);
         let fi_int = to_int(fi_cost);
@@ -414,7 +416,9 @@ fn test_group2_with_2opt() {
     println!("{}", "-".repeat(124));
 
     for name in ALL_INSTANCES {
-        let Some(coords) = get_dataset(name) else { continue };
+        let Some(coords) = get_dataset(name) else {
+            continue;
+        };
         let n = coords.len();
         let (nodes, mut edges) = build_graph(&coords, false, DistanceMode::Euc2d);
         let opt = optimal_cost(name).unwrap_or(0);
@@ -525,7 +529,9 @@ fn test_2opt_ablation() {
     println!("{}", "-".repeat(60));
 
     for name in ALL_INSTANCES {
-        let Some(coords) = get_dataset(name) else { continue };
+        let Some(coords) = get_dataset(name) else {
+            continue;
+        };
         let n = coords.len();
         let (nodes, mut edges) = build_graph(&coords, false, DistanceMode::Euc2d);
         let opt = optimal_cost(name).unwrap_or(0);

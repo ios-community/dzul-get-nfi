@@ -1114,7 +1114,6 @@ pub const PCB442_COORDS: &[(f64, f64)] = &[
     (61_700.0, 0.0),
 ];
 
-
 /// Coordinates for berlin52 (52 nodes).
 const BERLIN52_COORDS: [(f64, f64); 52] = [
     (565.0, 575.0),
@@ -3121,9 +3120,10 @@ pub fn get_dataset(name: &str) -> Option<Vec<(f64, f64)>> {
 
     // 1. Try local cache
     if let Ok(content) = fs::read_to_string(&cache_path)
-        && let Some(coords) = parse_tsplib_content(&content) {
-            return Some(coords);
-        }
+        && let Some(coords) = parse_tsplib_content(&content)
+    {
+        return Some(coords);
+    }
 
     // 2. Hardcoded fallback FIRST for known small instances
     let hardcoded = match name {
@@ -3155,7 +3155,7 @@ pub fn get_dataset(name: &str) -> Option<Vec<(f64, f64)>> {
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(std::time::Duration::from_secs(3)))
         .build()
-        .into_agent();
+        .new_agent();
 
     if let Ok(mut response) = agent.get(&mirror_url).call()
         && let Ok(content) = response.body_mut().read_to_string()

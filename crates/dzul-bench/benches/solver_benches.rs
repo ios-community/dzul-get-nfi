@@ -13,7 +13,7 @@ use dzul_core::{
     calculate_threshold, solve, solve_readonly, static_bypass, two_opt,
 };
 
-fn build_workspace(n: usize) -> (
+type WorkspaceVecs = (
     Vec<u32>,
     Vec<u32>,
     Vec<bool>,
@@ -25,7 +25,9 @@ fn build_workspace(n: usize) -> (
     Vec<i32>,
     Vec<u64>,
     Vec<bool>,
-) {
+);
+
+fn build_workspace(n: usize) -> WorkspaceVecs {
     (
         vec![0u32; n * 4],
         vec![0u32; n],
@@ -41,7 +43,7 @@ fn build_workspace(n: usize) -> (
     )
 }
 
-fn make_workspace<'a>(
+struct WorkspaceRefs<'a> {
     path_stack: &'a mut Vec<u32>,
     next_edge_idx: &'a mut Vec<u32>,
     visited: &'a mut Vec<bool>,
@@ -53,19 +55,22 @@ fn make_workspace<'a>(
     a_star_heap_pos: &'a mut Vec<i32>,
     f_score: &'a mut Vec<u64>,
     dlb: &'a mut Vec<bool>,
-) -> Workspace<'a> {
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn make_workspace(refs: WorkspaceRefs<'_>) -> Workspace<'_> {
     Workspace {
-        path_stack,
-        next_edge_idx,
-        visited,
-        a_star_parent,
-        g_score,
-        open_set,
-        nfi_buffer,
-        a_star_heap,
-        a_star_heap_pos,
-        f_score,
-        dlb,
+        path_stack: refs.path_stack,
+        next_edge_idx: refs.next_edge_idx,
+        visited: refs.visited,
+        a_star_parent: refs.a_star_parent,
+        g_score: refs.g_score,
+        open_set: refs.open_set,
+        nfi_buffer: refs.nfi_buffer,
+        a_star_heap: refs.a_star_heap,
+        a_star_heap_pos: refs.a_star_heap_pos,
+        f_score: refs.f_score,
+        dlb: refs.dlb,
     }
 }
 
@@ -139,11 +144,19 @@ fn get_nfi(name: &&str) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
@@ -162,11 +175,19 @@ fn get_nfi_with_2opt(name: &&str) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(5000), enable_2opt: true, threshold_multiplier: None,
@@ -194,11 +215,19 @@ fn ablation_full_get_nfi(name: &&str) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     if !is_uniform {
         let _ = calculate_nfi(&graph, &mut workspace);
@@ -224,11 +253,19 @@ fn ablation_no_nfi(name: &&str) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
@@ -244,17 +281,25 @@ fn ablation_arithmetic_mean(name: &&str) {
     let (nodes, mut edges) = build_complete_graph(&coords, false);
     let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
 
-    let a_theta = calculate_arithmetic_threshold(&graph.edges);
+    let a_theta = calculate_arithmetic_threshold(graph.edges);
     let is_uniform = static_bypass(&graph);
 
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     if !is_uniform {
         let _ = calculate_nfi(&graph, &mut workspace);
@@ -279,11 +324,19 @@ fn sensitivity_backtracks(limit: usize) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(limit), enable_2opt: false, threshold_multiplier: None,
@@ -304,11 +357,19 @@ fn sensitivity_threshold_alpha(alpha: f64) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(5000), enable_2opt: false,
@@ -329,11 +390,19 @@ fn sensitivity_backtrack_factor(c: usize) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     // max_backtracks = None => uses dynamic formula M(N,d) = c*N*d
     let config = TspConfig {
@@ -355,11 +424,19 @@ fn sensitivity_candidate_set_k(k: usize) {
     let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
          mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
          mut dlb) = build_workspace(n);
-    let mut workspace = make_workspace(
-        &mut path_stack, &mut next_edge_idx, &mut visited, &mut a_star_parent, &mut g_score,
-        &mut open_set, &mut nfi_buffer, &mut a_star_heap, &mut a_star_heap_pos,
-        &mut f_score, &mut dlb,
-    );
+    let mut workspace = make_workspace(WorkspaceRefs {
+        path_stack: &mut path_stack,
+        next_edge_idx: &mut next_edge_idx,
+        visited: &mut visited,
+        a_star_parent: &mut a_star_parent,
+        g_score: &mut g_score,
+        open_set: &mut open_set,
+        nfi_buffer: &mut nfi_buffer,
+        a_star_heap: &mut a_star_heap,
+        a_star_heap_pos: &mut a_star_heap_pos,
+        f_score: &mut f_score,
+        dlb: &mut dlb,
+    });
 
     let config = TspConfig {
         start_node: 0, max_backtracks: Some(5000), enable_2opt: true, threshold_multiplier: None,

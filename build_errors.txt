@@ -1,0 +1,143 @@
+   Compiling dzul-bench v0.1.0 (C:\Users\Administrator\Documents\Projects\Rust\dzul-get-nfi\crates\dzul-bench)
+error[E0621]: explicit lifetime required in the type of `refs`
+  --> crates\dzul-bench\benches\solver_benches.rs:61:5
+   |
+61 | /     Workspace {
+62 | |         path_stack: refs.path_stack,
+63 | |         next_edge_idx: refs.next_edge_idx,
+64 | |         visited: refs.visited,
+...  |
+72 | |         dlb: refs.dlb,
+73 | |     }
+   | |_____^ lifetime `'a` required
+   |
+help: add explicit lifetime `'a` to the type of `refs`
+   |
+60 | fn make_workspace<'a>(refs: &'a WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              ++
+
+error[E0596]: cannot borrow `*refs.path_stack` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:62:21
+   |
+62 |         path_stack: refs.path_stack,
+   |                     ^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.next_edge_idx` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:63:24
+   |
+63 |         next_edge_idx: refs.next_edge_idx,
+   |                        ^^^^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.visited` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:64:18
+   |
+64 |         visited: refs.visited,
+   |                  ^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.a_star_parent` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:65:24
+   |
+65 |         a_star_parent: refs.a_star_parent,
+   |                        ^^^^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.g_score` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:66:18
+   |
+66 |         g_score: refs.g_score,
+   |                  ^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.open_set` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:67:19
+   |
+67 |         open_set: refs.open_set,
+   |                   ^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.nfi_buffer` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:68:21
+   |
+68 |         nfi_buffer: refs.nfi_buffer,
+   |                     ^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.a_star_heap` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:69:22
+   |
+69 |         a_star_heap: refs.a_star_heap,
+   |                      ^^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.a_star_heap_pos` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:70:26
+   |
+70 |         a_star_heap_pos: refs.a_star_heap_pos,
+   |                          ^^^^^^^^^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.f_score` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:71:18
+   |
+71 |         f_score: refs.f_score,
+   |                  ^^^^^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+error[E0596]: cannot borrow `*refs.dlb` as mutable, as it is behind a `&` reference
+  --> crates\dzul-bench\benches\solver_benches.rs:72:14
+   |
+72 |         dlb: refs.dlb,
+   |              ^^^^^^^^ `refs` is a `&` reference, so it cannot be borrowed as mutable
+   |
+help: consider changing this to be a mutable reference
+   |
+60 | fn make_workspace<'a>(refs: &mut WorkspaceRefs<'a>) -> Workspace<'a> {
+   |                              +++
+
+Some errors have detailed explanations: E0596, E0621.
+For more information about an error, try `rustc --explain E0596`.
+error: could not compile `dzul-bench` (bench "solver_benches") due to 12 previous errors
+warning: build failed, waiting for other jobs to finish...

@@ -242,16 +242,16 @@ pub fn solve_farthest_insertion(
         // Pick the unvisited node farthest from any tour node.
         let mut best_node = None;
         let mut best_dist = 0u64;
-        for i in 0..n {
-            if in_tour[i] {
+        for (i, &in_t) in in_tour.iter().enumerate().take(n) {
+            if in_t {
                 continue;
             }
             let mut min_d = u64::MAX;
             for &t in &tour {
-                if let Some(w) = edge_weight(graph, t, i as u32) {
-                    if w.0 < min_d {
-                        min_d = w.0;
-                    }
+                if let Some(w) = edge_weight(graph, t, i as u32)
+                    && w.0 < min_d
+                {
+                    min_d = w.0;
                 }
             }
             if min_d > best_dist {
@@ -319,7 +319,7 @@ pub fn solve_clarke_wright_savings(
             savings.push((s, i, j));
         }
     }
-    savings.sort_by(|a, b| b.0.cmp(&a.0));
+    savings.sort_by_key(|b| std::cmp::Reverse(b.0));
 
     // Route represented as VecDeque-like: each node has prev/next links.
     // We track route membership and the endpoints.
@@ -337,9 +337,9 @@ pub fn solve_clarke_wright_savings(
     }
     // For depot, we don't track next/prev (it appears in every route as endpoint).
     let mut route_endpoint: Vec<bool> = vec![false; n];
-    for i in 0..n {
+    for (i, endpoint) in route_endpoint.iter_mut().enumerate().take(n) {
         if i as u32 != start_node {
-            route_endpoint[i] = true;
+            *endpoint = true;
         }
     }
 
@@ -426,11 +426,11 @@ pub fn solve_clarke_wright_savings(
     }
     if !found {
         // Fallback: any node with prev == start
-        for i in 0..n {
+        for (i, &prev) in prev_node.iter().enumerate().take(n) {
             if i as u32 == start_node {
                 continue;
             }
-            if prev_node[i] == start_node {
+            if prev == start_node {
                 tour.push(i as u32);
                 let mut cur = i as u32;
                 while next_node[cur as usize] != start_node {
