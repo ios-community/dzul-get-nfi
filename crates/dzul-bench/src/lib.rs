@@ -234,51 +234,77 @@ pub fn solve_farthest_insertion(
         return (Vec::new(), Weight(0));
     }
 
+    // Helper closure for O(1) average edge weight lookup
+    let get_w = |u: usize, v: usize| -> u64 {
+        let node = &graph.nodes[u];
+        for edge in &graph.edges[node.edge_start as usize..node.edge_end as usize] {
+            if edge.target == v as u32 {
+                return edge.weight.0;
+            }
+        }
+        u64::MAX
+    };
+
     let mut tour: Vec<u32> = vec![start_node, start_node];
     let mut in_tour = vec![false; n];
     in_tour[start_node as usize] = true;
 
+    // Array tracking minimum distance from unvisited nodes to the active tour
+    let mut min_dist_to_tour = vec![u64::MAX; n];
+    for i in 0..n {
+        if i as u32 != start_node {
+            min_dist_to_tour[i] = get_w(start_node as usize, i);
+        }
+    }
+
     while tour.len() <= n {
-        // Pick the unvisited node farthest from any tour node.
-        let mut best_node = None;
-        let mut best_dist = 0u64;
-        for (i, &in_t) in in_tour.iter().enumerate().take(n) {
-            if in_t {
-                continue;
-            }
-            let mut min_d = u64::MAX;
-            for &t in &tour {
-                if let Some(w) = edge_weight(graph, t, i as u32)
-                    && w.0 < min_d
-                {
-                    min_d = w.0;
-                }
-            }
-            if min_d > best_dist {
-                best_dist = min_d;
-                best_node = Some(i as u32);
+        // Find the unvisited node farthest from any node in the current tour in O(N)
+        let mut farthest_node = None;
+        let mut max_dist = 0u64;
+
+        for i in 0..n {
+            if !in_tour[i] && min_dist_to_tour[i] > max_dist {
+                max_dist = min_dist_to_tour[i];
+                farthest_node = Some(i as u32);
             }
         }
 
-        let Some(insert_node) = best_node else { break };
+        let Some(insert_node) = farthest_node else {
+            break;
+        };
 
-        // Find best insertion position minimising detour.
-        let mut best_pos = 0;
-        let mut best_delta = u64::MAX;
+        // Find best insertion position minimizing insertion detour cost
+        let mut best_pos = 1;
+        let mut min_delta = u64::MAX;
         for k in 0..tour.len() - 1 {
-            let a = tour[k];
-            let b = tour[k + 1];
-            let w_a_n = edge_weight(graph, a, insert_node).map_or(u64::MAX, |w| w.0);
-            let w_n_b = edge_weight(graph, insert_node, b).map_or(u64::MAX, |w| w.0);
-            let w_ab = edge_weight(graph, a, b).map_or(0, |w| w.0);
-            let delta = w_a_n.saturating_add(w_n_b).saturating_sub(w_ab);
-            if delta < best_delta {
-                best_delta = delta;
+            let a = tour[k] as usize;
+            let b = tour[k + 1] as usize;
+            let ins = insert_node as usize;
+
+            let w_a_n = get_w(a, ins);
+            let w_n_b = get_w(ins, b);
+            let w_a_b = get_w(a, b);
+
+            let delta = w_a_n.saturating_add(w_n_b).saturating_sub(w_a_b);
+            if delta < min_delta {
+                min_delta = delta;
                 best_pos = k + 1;
             }
         }
+
         tour.insert(best_pos, insert_node);
         in_tour[insert_node as usize] = true;
+
+        // Update min_dist_to_tour array for remaining unvisited nodes in O(N)
+        let ins = insert_node as usize;
+        for i in 0..n {
+            if !in_tour[i] {
+                let d = get_w(i, ins);
+                if d < min_dist_to_tour[i] {
+                    min_dist_to_tour[i] = d;
+                }
+            }
+        }
     }
 
     assert_tour_integrity(&tour, n);
@@ -302,142 +328,125 @@ pub fn solve_clarke_wright_savings(
         return (vec![start_node, start_node], Weight(0));
     }
 
-    // Savings s(i, j) = d(0, i) + d(0, j) - d(i, j)
+    let get_w = |u: usize, v: usize| -> u64 {
+        let node = &graph.nodes[u];
+        for edge in &graph.edges[node.edge_start as usize..node.edge_end as usize] {
+            if edge.target == v as u32 {
+                return edge.weight.0;
+            }
+        }
+        u64::MAX
+    };
+
+    // Calculate Savings: s(i, j) = d(depot, i) + d(depot, j) - d(i, j)
     let mut savings: Vec<(u64, u32, u32)> = Vec::with_capacity(n * (n - 1) / 2);
-    for i in 0..n as u32 {
-        if i == start_node {
+    let s_node = start_node as usize;
+    for i in 0..n {
+        if i == s_node {
             continue;
         }
-        let d0i = edge_weight(graph, start_node, i).map_or(u64::MAX, |w| w.0);
-        for j in (i + 1)..n as u32 {
-            if j == start_node {
+        let d0i = get_w(s_node, i);
+        if d0i == u64::MAX {
+            continue;
+        }
+        for j in (i + 1)..n {
+            if j == s_node {
                 continue;
             }
-            let d0j = edge_weight(graph, start_node, j).map_or(u64::MAX, |w| w.0);
-            let dij = edge_weight(graph, i, j).map_or(u64::MAX, |w| w.0);
+            let d0j = get_w(s_node, j);
+            let dij = get_w(i, j);
+            if d0j == u64::MAX || dij == u64::MAX {
+                continue;
+            }
             let s = d0i.saturating_add(d0j).saturating_sub(dij);
-            savings.push((s, i, j));
+            savings.push((s, i as u32, j as u32));
         }
     }
-    savings.sort_by_key(|b| std::cmp::Reverse(b.0));
+    savings.sort_unstable_by(|a, b| b.0.cmp(&a.0));
 
-    // Route represented as VecDeque-like: each node has prev/next links.
-    // We track route membership and the endpoints.
-    let mut next_node: Vec<u32> = (0..n as u32).collect();
-    let mut prev_node: Vec<u32> = (0..n as u32).collect();
-    let mut in_route = vec![false; n];
-    // Each non-depot node is its own route initially: 0 -> i -> 0
+    // Union-Find (Disjoint-Set) data structure to track route components
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find(p: &mut [usize], i: usize) -> usize {
+        let mut root = i;
+        while root != p[root] {
+            root = p[root];
+        }
+        let mut curr = i;
+        while curr != root {
+            let nxt = p[curr];
+            p[curr] = root;
+            curr = nxt;
+        }
+        root
+    }
+
+    let mut next_node: Vec<u32> = vec![u32::MAX; n];
+    let mut prev_node: Vec<u32> = vec![u32::MAX; n];
+    let mut degree: Vec<usize> = vec![0; n];
+
+    for &(_s, u_u32, v_u32) in &savings {
+        let u = u_u32 as usize;
+        let v = v_u32 as usize;
+
+        // Nodes in a linear path can have at most degree 2
+        if degree[u] >= 2 || degree[v] >= 2 {
+            continue;
+        }
+
+        // Prevent cycle formation using Union-Find
+        if find(&mut parent, u) == find(&mut parent, v) {
+            continue;
+        }
+
+        // Link u -> v or v -> u
+        if next_node[u] == u32::MAX && prev_node[v] == u32::MAX {
+            next_node[u] = v_u32;
+            prev_node[v] = u_u32;
+            degree[u] += 1;
+            degree[v] += 1;
+            let root_u = find(&mut parent, u);
+            let root_v = find(&mut parent, v);
+            parent[root_u] = root_v;
+        } else if next_node[v] == u32::MAX && prev_node[u] == u32::MAX {
+            next_node[v] = u_u32;
+            prev_node[u] = v_u32;
+            degree[u] += 1;
+            degree[v] += 1;
+            let root_u = find(&mut parent, u);
+            let root_v = find(&mut parent, v);
+            parent[root_u] = root_v;
+        }
+    }
+
+    // Reconstruct continuous tour from depot
+    let mut head = u32::MAX;
     for i in 0..n {
-        if i as u32 == start_node {
-            continue;
-        }
-        next_node[i] = start_node;
-        prev_node[i] = start_node;
-        in_route[i] = true;
-    }
-    // For depot, we don't track next/prev (it appears in every route as endpoint).
-    let mut route_endpoint: Vec<bool> = vec![false; n];
-    for (i, endpoint) in route_endpoint.iter_mut().enumerate().take(n) {
-        if i as u32 != start_node {
-            *endpoint = true;
-        }
-    }
-
-    for &(_s, i, j) in &savings {
-        // Merge only if i and j are endpoints of different routes.
-        if !route_endpoint[i as usize] || !route_endpoint[j as usize] {
-            continue;
-        }
-
-        // Check that i and j are not in the same route already
-        // by walking from i forward to start_node.
-        let mut same_route = false;
-        let mut cur = next_node[i as usize];
-        let mut steps = 0;
-        while cur != start_node && steps < n {
-            if cur == j {
-                same_route = true;
-                break;
-            }
-            cur = next_node[cur as usize];
-            steps += 1;
-        }
-        if same_route || steps >= n {
-            continue;
-        }
-
-        // Merge: connect i -> j. One of them must have next == start_node
-        // (i is end of route). If i's next is start, set i.next = j, j.prev = i.
-        if next_node[i as usize] == start_node && prev_node[j as usize] == start_node {
-            next_node[i as usize] = j;
-            prev_node[j as usize] = i;
-            route_endpoint[i as usize] = false;
-            route_endpoint[j as usize] = false;
-            // The merged route endpoints are the other ends.
-            // Walk back from i to find its route start.
-            let mut a = i;
-            while prev_node[a as usize] != start_node {
-                a = prev_node[a as usize];
-            }
-            let mut b = j;
-            while next_node[b as usize] != start_node {
-                b = next_node[b as usize];
-            }
-            route_endpoint[a as usize] = true;
-            route_endpoint[b as usize] = true;
-        } else if next_node[j as usize] == start_node && prev_node[i as usize] == start_node {
-            next_node[j as usize] = i;
-            prev_node[i as usize] = j;
-            route_endpoint[i as usize] = false;
-            route_endpoint[j as usize] = false;
-            let mut a = j;
-            while prev_node[a as usize] != start_node {
-                a = prev_node[a as usize];
-            }
-            let mut b = i;
-            while next_node[b as usize] != start_node {
-                b = next_node[b as usize];
-            }
-            route_endpoint[a as usize] = true;
-            route_endpoint[b as usize] = true;
-        }
-    }
-
-    // Reconstruct the tour from start_node.
-    let mut tour: Vec<u32> = Vec::with_capacity(n + 1);
-    tour.push(start_node);
-    // Find first node after depot
-    let mut found = false;
-    for i in 0..n {
-        if i as u32 == start_node {
-            continue;
-        }
-        if prev_node[i] == start_node && route_endpoint[i] {
-            // Start from one endpoint
-            tour.push(i as u32);
-            let mut cur = i as u32;
-            while next_node[cur as usize] != start_node {
-                cur = next_node[cur as usize];
-                tour.push(cur);
-            }
-            found = true;
+        if i as u32 != start_node && prev_node[i] == u32::MAX {
+            head = i as u32;
             break;
         }
     }
-    if !found {
-        // Fallback: any node with prev == start
-        for (i, &prev) in prev_node.iter().enumerate().take(n) {
-            if i as u32 == start_node {
-                continue;
-            }
-            if prev == start_node {
+
+    let mut tour: Vec<u32> = Vec::with_capacity(n + 1);
+    tour.push(start_node);
+
+    if head != u32::MAX {
+        let mut curr = head;
+        while curr != u32::MAX && tour.len() <= n {
+            tour.push(curr);
+            curr = next_node[curr as usize];
+        }
+    }
+
+    // Append remaining unconnected nodes
+    if tour.len() < n + 1 {
+        let mut visited = vec![false; n];
+        for &node in &tour {
+            visited[node as usize] = true;
+        }
+        for i in 0..n {
+            if !visited[i] {
                 tour.push(i as u32);
-                let mut cur = i as u32;
-                while next_node[cur as usize] != start_node {
-                    cur = next_node[cur as usize];
-                    tour.push(cur);
-                }
-                break;
             }
         }
     }
