@@ -7,6 +7,7 @@
     clippy::cast_precision_loss,
     clippy::must_use_candidate,
     clippy::missing_panics_doc,
+    clippy::needless_range_loop,
     clippy::too_many_lines
 )]
 
@@ -223,6 +224,9 @@ pub fn solve_nearest_neighbor(graph: &dzul_core::Graph<'_>, start_node: u32) -> 
 /// Fast O(1) edge weight lookup helper for complete CSR graphs.
 #[inline]
 fn get_w_fast(graph: &dzul_core::Graph<'_>, u: usize, v: usize) -> u64 {
+    if u == v {
+        return 0;
+    }
     let node_u = &graph.nodes[u];
     let start = node_u.edge_start as usize;
     let end = node_u.edge_end as usize;
@@ -301,11 +305,11 @@ pub fn solve_farthest_insertion(
             let b = tour[k + 1] as usize;
             let ins = insert_node as usize;
 
-            let w_a_n = get_w(a, ins);
-            let w_n_b = get_w(ins, b);
+            let w_a_ins = get_w(a, ins);
+            let w_ins_b = get_w(ins, b);
             let w_a_b = get_w(a, b);
 
-            let delta = w_a_n.saturating_add(w_n_b).saturating_sub(w_a_b);
+            let delta = w_a_ins.saturating_add(w_ins_b).saturating_sub(w_a_b);
             if delta < min_delta {
                 min_delta = delta;
                 best_pos = k + 1;
@@ -385,11 +389,10 @@ pub fn solve_clarke_wright_savings(
             savings.push((s, i as u32, j as u32));
         }
     }
-    savings.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    savings.sort_unstable_by_key(|k| std::cmp::Reverse(k.0));
 
     // Union-Find (Disjoint-Set) data structure to track route components
-    let mut parent: Vec<usize> = (0..n).collect();
-    fn find(p: &mut [usize], i: usize) -> usize {
+    let find = |p: &mut [usize], i: usize| -> usize {
         let mut root = i;
         while root != p[root] {
             root = p[root];
@@ -401,7 +404,9 @@ pub fn solve_clarke_wright_savings(
             curr = nxt;
         }
         root
-    }
+    };
+
+    let mut parent: Vec<usize> = (0..n).collect();
 
     let mut next_node: Vec<u32> = vec![u32::MAX; n];
     let mut prev_node: Vec<u32> = vec![u32::MAX; n];
@@ -520,6 +525,7 @@ pub fn solve_random_tour(
 }
 
 /// Looks up the weight of the edge `u -> v` in the graph.
+#[allow(dead_code)]
 fn edge_weight(graph: &dzul_core::Graph<'_>, u: u32, v: u32) -> Option<Weight> {
     let w = get_w_fast(graph, u as usize, v as usize);
     if w == u64::MAX { None } else { Some(Weight(w)) }

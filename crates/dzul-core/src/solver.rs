@@ -30,7 +30,7 @@ pub struct TspConfig {
     ///
     /// When `None`, the limit is computed dynamically using
     /// [`calculate_dynamic_backtrack_limit`] with the configured
-    /// [`backtrack_factor`].
+    /// [`TspConfig::backtrack_factor`].
     pub max_backtracks: Option<usize>,
     /// Enables the in-place 2-Opt local search improvement.
     pub enable_2opt: bool,
@@ -55,9 +55,9 @@ pub struct TspConfig {
 /// # Taxonomy
 ///
 /// On complete Euclidean graphs (e.g. TSPLIB `EUC_2D`), the solver always
-/// produces a [`StrictCycle`] — a Hamiltonian cycle where each node is visited
+/// produces a [`TourType::StrictCycle`] — a Hamiltonian cycle where each node is visited
 /// exactly once. On incomplete/sparse graphs, the A* fallback may produce a
-/// [`ClosedWalk`] (Graph-TSP / Metric Closure TSP), where nodes along the A*
+/// [`TourType::ClosedWalk`] (Graph-TSP / Metric Closure TSP), where nodes along the A*
 /// path back to the start are revisited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TourType {

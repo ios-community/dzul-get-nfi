@@ -1,4 +1,6 @@
-﻿//! Dataset management with online fetching, local caching, and full hardcoded fallback.
+//! Dataset management with online fetching, local caching, and full hardcoded fallback.
+
+#![allow(clippy::large_const_arrays)]
 
 use std::{fs, io::Write, path::Path};
 
@@ -3101,8 +3103,8 @@ const A280_COORDS: [(f64, f64); 280] = [
     (252.0, 125.0),
     (260.0, 129.0),
     (280.0, 133.0),
-];
-pub const ATT532_COORDS : [(f64, f64); 532] = [
+];
+pub const ATT532_COORDS: [(f64, f64); 532] = [
     (7810.0, 6053.0),
     (7798.0, 5709.0),
     (7264.0, 5575.0),
@@ -3637,7 +3639,7 @@ pub const ATT532_COORDS : [(f64, f64); 532] = [
     (5469.0, 10.0),
 ];
 
-pub const U574_COORDS : [(f64, f64); 574] = [
+pub const U574_COORDS: [(f64, f64); 574] = [
     (629.6, 680.9),
     (756.5, 772.7),
     (781.9, 772.7),
@@ -4214,7 +4216,7 @@ pub const U574_COORDS : [(f64, f64); 574] = [
     (626.6, 678.0),
 ];
 
-pub const RAT575_COORDS : [(f64, f64); 575] = [
+pub const RAT575_COORDS: [(f64, f64); 575] = [
     (6.0, 18.0),
     (11.0, 0.0),
     (24.0, 6.0),
@@ -4792,7 +4794,7 @@ pub const RAT575_COORDS : [(f64, f64); 575] = [
     (226.0, 482.0),
 ];
 
-pub const U724_COORDS : [(f64, f64); 724] = [
+pub const U724_COORDS: [(f64, f64); 724] = [
     (605.6, 796.6),
     (681.8, 1025.2),
     (605.6, 1152.2),
@@ -5519,7 +5521,7 @@ pub const U724_COORDS : [(f64, f64); 724] = [
     (681.8, 923.6),
 ];
 
-pub const RAT783_COORDS : [(f64, f64); 783] = [
+pub const RAT783_COORDS: [(f64, f64); 783] = [
     (13.0, 6.0),
     (49.0, 6.0),
     (105.0, 6.0),
@@ -6305,7 +6307,7 @@ pub const RAT783_COORDS : [(f64, f64); 783] = [
     (231.0, 580.0),
 ];
 
-pub const PCB1173_COORDS : [(f64, f64); 1173] = [
+pub const PCB1173_COORDS: [(f64, f64); 1173] = [
     (2017.0, 663.0),
     (2017.0, 703.0),
     (2018.0, 741.0),
@@ -7481,7 +7483,7 @@ pub const PCB1173_COORDS : [(f64, f64); 1173] = [
     (215.0, 3385.0),
 ];
 
-pub const D1291_COORDS : [(f64, f64); 1291] = [
+pub const D1291_COORDS: [(f64, f64); 1291] = [
     (0.0, 0.0),
     (837.0, 958.3),
     (862.4, 958.3),
@@ -8775,7 +8777,7 @@ pub const D1291_COORDS : [(f64, f64); 1291] = [
     (3554.8, 958.3),
 ];
 
-pub const PR2392_COORDS : [(f64, f64); 2392] = [
+pub const PR2392_COORDS: [(f64, f64); 2392] = [
     (1639.0, 2156.0),
     (1875.0, 2925.0),
     (2150.0, 2925.0),
@@ -11170,7 +11172,7 @@ pub const PR2392_COORDS : [(f64, f64); 2392] = [
     (1640.0, 2256.0),
 ];
 
-pub const PCB3038_COORDS : [(f64, f64); 3038] = [
+pub const PCB3038_COORDS: [(f64, f64); 3038] = [
     (2830.0, 40.0),
     (2830.0, 77.0),
     (2830.0, 114.0),
@@ -14211,7 +14213,7 @@ pub const PCB3038_COORDS : [(f64, f64); 3038] = [
     (38.0, 3941.0),
 ];
 
-pub const FNL4461_COORDS : [(f64, f64); 4461] = [
+pub const FNL4461_COORDS: [(f64, f64); 4461] = [
     (5639.0, 6909.0),
     (5652.0, 6142.0),
     (5654.0, 6101.0),
@@ -19679,8 +19681,6 @@ pub const PR1002_COORDS: [(f64, f64); 1002] = [
     (14550.0, 8450.0),
     (14550.0, 11650.0),
 ];
-
-
 
 /// Returns the coordinates for a given TSPLIB dataset name.
 ///

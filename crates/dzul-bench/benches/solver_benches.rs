@@ -9,8 +9,8 @@
 
 use dzul_bench::{build_complete_graph, get_dataset, solve_nearest_neighbor};
 use dzul_core::{
-    Edge, Graph, TspConfig, Weight, Workspace, ZeroHeuristic, calculate_nfi,
-    calculate_threshold, solve, solve_readonly, static_bypass, two_opt,
+    Edge, Graph, TspConfig, Weight, Workspace, ZeroHeuristic, calculate_nfi, calculate_threshold,
+    solve, solve_readonly, static_bypass, two_opt,
 };
 
 type WorkspaceVecs = (
@@ -102,10 +102,9 @@ fn calculate_arithmetic_threshold(edges: &[Edge]) -> Weight {
 }
 
 const INSTANCES: &[&str] = &[
-    "eil51", "berlin52", "st70", "eil76", "pr76", "rd100", "lin105", "kroA100", "ch150",
-    "rat195", "kroA200", "tsp225", "pr226", "gil262", "a280", "lin318", "pcb442", "att532",
-    "u574", "rat575", "u724", "rat783", "pr1002", "pcb1173", "d1291", "pr2392", "pcb3038",
-    "fnl4461",
+    "eil51", "berlin52", "st70", "eil76", "pr76", "rd100", "lin105", "kroA100", "ch150", "rat195",
+    "kroA200", "tsp225", "pr226", "gil262", "a280", "lin318", "pcb442", "att532", "u574", "rat575",
+    "u724", "rat783", "pr1002", "pcb1173", "d1291", "pr2392", "pcb3038", "fnl4461",
 ];
 
 fn main() {
@@ -118,7 +117,11 @@ fn main() {
 fn nearest_neighbor(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
     let _ = solve_nearest_neighbor(&graph, 0);
 }
 
@@ -127,7 +130,11 @@ fn nearest_neighbor_2opt(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
     let (mut path, _) = solve_nearest_neighbor(&graph, 0);
     let mut dlb = vec![false; n];
     let mut path_pos = vec![-1; n];
@@ -139,11 +146,25 @@ fn get_nfi(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -159,8 +180,12 @@ fn get_nfi(name: &&str) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -170,11 +195,25 @@ fn get_nfi_with_2opt(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -190,8 +229,12 @@ fn get_nfi_with_2opt(name: &&str) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: true, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: true,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -207,14 +250,28 @@ fn ablation_full_get_nfi(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
     let theta = calculate_threshold(&graph);
     let is_uniform = static_bypass(&graph);
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -234,8 +291,12 @@ fn ablation_full_get_nfi(name: &&str) {
         graph.sort_edges(theta, workspace.nfi_buffer);
     }
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve_readonly(&graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -245,14 +306,28 @@ fn ablation_no_nfi(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
     let theta = calculate_threshold(&graph);
     sort_edges_without_nfi(&mut graph, theta);
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -268,8 +343,12 @@ fn ablation_no_nfi(name: &&str) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve_readonly(&graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -279,14 +358,28 @@ fn ablation_arithmetic_mean(name: &&str) {
     let coords = get_dataset(name).expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
     let a_theta = calculate_arithmetic_threshold(graph.edges);
     let is_uniform = static_bypass(&graph);
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -306,8 +399,12 @@ fn ablation_arithmetic_mean(name: &&str) {
         graph.sort_edges(a_theta, workspace.nfi_buffer);
     }
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: false, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve_readonly(&graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -319,11 +416,25 @@ fn sensitivity_backtracks(limit: usize) {
     let coords = get_dataset("eil51").expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -339,8 +450,12 @@ fn sensitivity_backtracks(limit: usize) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(limit), enable_2opt: false, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(limit),
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -352,11 +467,25 @@ fn sensitivity_threshold_alpha(alpha: f64) {
     let coords = get_dataset("eil51").expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -372,8 +501,12 @@ fn sensitivity_threshold_alpha(alpha: f64) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: false,
-        threshold_multiplier: Some(alpha), backtrack_factor: 10, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: false,
+        threshold_multiplier: Some(alpha),
+        backtrack_factor: 10,
+        candidate_set_size: 15,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -385,11 +518,25 @@ fn sensitivity_backtrack_factor(c: usize) {
     let coords = get_dataset("eil51").expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -406,8 +553,12 @@ fn sensitivity_backtrack_factor(c: usize) {
 
     // max_backtracks = None => uses dynamic formula M(N,d) = c*N*d
     let config = TspConfig {
-        start_node: 0, max_backtracks: None, enable_2opt: false,
-        threshold_multiplier: None, backtrack_factor: c, candidate_set_size: 15,
+        start_node: 0,
+        max_backtracks: None,
+        enable_2opt: false,
+        threshold_multiplier: None,
+        backtrack_factor: c,
+        candidate_set_size: 15,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }
@@ -419,11 +570,25 @@ fn sensitivity_candidate_set_k(k: usize) {
     let coords = get_dataset("eil51").expect("dataset");
     let n = coords.len();
     let (nodes, mut edges) = build_complete_graph(&coords, false);
-    let mut graph = Graph { nodes: &nodes, edges: &mut edges, is_directed: false };
+    let mut graph = Graph {
+        nodes: &nodes,
+        edges: &mut edges,
+        is_directed: false,
+    };
 
-    let (mut path_stack, mut next_edge_idx, mut visited, mut a_star_parent, mut g_score,
-         mut open_set, mut nfi_buffer, mut a_star_heap, mut a_star_heap_pos, mut f_score,
-         mut dlb) = build_workspace(n);
+    let (
+        mut path_stack,
+        mut next_edge_idx,
+        mut visited,
+        mut a_star_parent,
+        mut g_score,
+        mut open_set,
+        mut nfi_buffer,
+        mut a_star_heap,
+        mut a_star_heap_pos,
+        mut f_score,
+        mut dlb,
+    ) = build_workspace(n);
     let mut workspace = make_workspace(WorkspaceRefs {
         path_stack: &mut path_stack,
         next_edge_idx: &mut next_edge_idx,
@@ -439,8 +604,12 @@ fn sensitivity_candidate_set_k(k: usize) {
     });
 
     let config = TspConfig {
-        start_node: 0, max_backtracks: Some(5000), enable_2opt: true, threshold_multiplier: None,
-        backtrack_factor: 10, candidate_set_size: k,
+        start_node: 0,
+        max_backtracks: Some(5000),
+        enable_2opt: true,
+        threshold_multiplier: None,
+        backtrack_factor: 10,
+        candidate_set_size: k,
     };
     let _ = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config);
 }

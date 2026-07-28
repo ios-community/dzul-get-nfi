@@ -8,9 +8,7 @@
 )]
 
 use dzul_bench::{build_complete_graph, build_incomplete_graph, get_dataset};
-use dzul_core::{
-    Graph, TspConfig, Weight, Workspace, ZeroHeuristic, solve,
-};
+use dzul_core::{Graph, TspConfig, Weight, Workspace, ZeroHeuristic, solve};
 use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -66,8 +66,16 @@ fn test_living_doc() {
     let mut found_anchors = HashSet::new();
     let mut found_tests = HashSet::new();
 
-    scan_dir(Path::new("crates/dzul-core/src"), &mut found_anchors, &mut found_tests);
-    scan_dir(Path::new("crates/dzul-bench"), &mut found_anchors, &mut found_tests);
+    scan_dir(
+        Path::new("crates/dzul-core/src"),
+        &mut found_anchors,
+        &mut found_tests,
+    );
+    scan_dir(
+        Path::new("crates/dzul-bench"),
+        &mut found_anchors,
+        &mut found_tests,
+    );
 
     let mut missing = Vec::new();
     for id in &expected_ids {
@@ -85,11 +93,7 @@ fn test_living_doc() {
     );
 }
 
-fn scan_dir(
-    dir: &Path,
-    found_anchors: &mut HashSet<String>,
-    found_tests: &mut HashSet<String>,
-) {
+fn scan_dir(dir: &Path, found_anchors: &mut HashSet<String>, found_tests: &mut HashSet<String>) {
     if !dir.exists() {
         return;
     }
@@ -120,8 +124,7 @@ fn scan_dir(
                                     && &normalized[idx - 1..idx] == "N"
                                     && normalized.len() >= idx + 5
                                 {
-                                    found_tests
-                                        .insert(normalized[idx - 1..idx + 5].to_string());
+                                    found_tests.insert(normalized[idx - 1..idx + 5].to_string());
                                 } else if normalized.len() >= idx + 5 {
                                     found_tests.insert(normalized[idx..idx + 5].to_string());
                                 }
