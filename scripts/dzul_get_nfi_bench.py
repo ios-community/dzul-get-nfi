@@ -183,6 +183,18 @@ def _run_cargo_with_memory(
 
     try:
         ps_proc = psutil.Process(process.pid)
+        # Sample memory immediately after process creation
+        try:
+            mem = ps_proc.memory_info()
+            peak_rss = mem.rss
+            try:
+                full_mem = ps_proc.memory_full_info()
+                peak_uss = full_mem.uss
+            except (psutil.AccessDenied, AttributeError):
+                peak_uss = mem.rss
+        except psutil.NoSuchProcess:
+            pass
+
         children = []
 
         for line in iter(process.stdout.readline, ""):
@@ -593,7 +605,14 @@ INSTANCES: dict[str, float] = {
     "lin318": 42_029.0,
     "pcb442": 50_778.0,
 }
-"""Mapping of TSPLIB instance names to their known optimal tour costs."""
+"""Mapping of STSP TSPLIB instance names to their known optimal tour costs."""
+
+ATSP_INSTANCES: dict[str, float] = {
+    "ftv33": 1_286.0,
+    "ry48p": 14_422.0,
+    "ft53": 6_905.0,
+}
+"""Mapping of ATSP TSPLIB instance names to their known optimal tour costs."""
 
 
 def run_main_experiments() -> None:
@@ -638,6 +657,17 @@ def run_main_experiments() -> None:
         peak_uss = 0
         try:
             ps_proc = psutil.Process(p.pid)
+            # Sample memory immediately after process creation
+            try:
+                mem = ps_proc.memory_info()
+                peak_rss = mem.rss
+                try:
+                    full_mem = ps_proc.memory_full_info()
+                    peak_uss = full_mem.uss
+                except (psutil.AccessDenied, AttributeError):
+                    peak_uss = mem.rss
+            except psutil.NoSuchProcess:
+                pass
             while p.poll() is None:
                 try:
                     mem = ps_proc.memory_info()
@@ -659,6 +689,7 @@ def run_main_experiments() -> None:
         return p.returncode, stdout, stderr, peak_rss, peak_uss
 
     results: list[dict[str, object]] = []
+    N_REPETITIONS = 10
     for instance, opt_cost in INSTANCES.items():
         for sparsity in SPARSITY_VALUES:
             for enable_2opt in [False, True]:
@@ -668,26 +699,43 @@ def run_main_experiments() -> None:
 
                 cost = float("nan")
                 tour_type = "N/A"
-                elapsed_ms = 0.0
+                times: list[float] = []
                 rss = 0.0
                 uss = 0.0
 
-                if bin_exists:
-                    cmd = [
-                        str(RUST_BIN_PATH),
-                        "--instance",
-                        instance,
-                        "--sparsity",
-                        str(sparsity),
-                        "--backtracks",
-                        "1000",
-                    ]
-                    if enable_2opt:
-                        cmd.append("--2opt")
+                for _ in range(N_REPETITIONS):
+                    if bin_exists:
+                        cmd = [
+                            str(RUST_BIN_PATH),
+                            "--instance",
+                            instance,
+                            "--sparsity",
+                            str(sparsity),
+                            "--backtracks",
+                            "1000",
+                        ]
+                        if enable_2opt:
+                            cmd.append("--2opt")
 
-                    ret, stdout, _stderr, rss, uss = run_benchmark_process(cmd)
-                    if ret == 0:
-                        elapsed_ms, cost, tour_type = parse_benchmark_output(stdout)
+                        ret, stdout, _stderr, iter_rss, iter_uss = run_benchmark_process(cmd)
+                        if ret == 0:
+                            iter_ms, iter_cost, iter_type = parse_benchmark_output(stdout)
+                            times.append(iter_ms)
+                            if iter_rss > rss:
+                                rss = iter_rss
+                            if iter_uss > uss:
+                                uss = iter_uss
+                            cost = iter_cost
+                            tour_type = iter_type
+
+                if times:
+                    import statistics
+
+                    elapsed_ms = statistics.mean(times)
+                    time_sd = statistics.stdev(times) if len(times) > 1 else 0.0
+                else:
+                    elapsed_ms = 0.0
+                    time_sd = 0.0
 
                 if tour_type == "N/A":
                     cost = float("nan")
@@ -701,7 +749,7 @@ def run_main_experiments() -> None:
                         "Sparsity": sparsity_label,
                         "Algorithm": opt_label,
                         "Time_MS": elapsed_ms,
-                        "Time_SD": 0.0,
+                        "Time_SD": time_sd,
                         "Cost": cost,
                         "Gap_Percent": gap,
                         "RSS_KB": rss / 1024,
@@ -794,7 +842,7 @@ def run_advanced_analyses() -> None:
 
     # --- Pareto Frontier ---
     print("Running Pareto Frontier Analysis...")
-    backtrack_limits = [100, 1000, 5000]
+    backtrack_limits = [10, 50, 100, 250, 500, 1000, 2500, 5000]
     pareto_results: list[dict[str, float]] = []
     for limit in backtrack_limits:
         cost = float("nan")
@@ -851,37 +899,36 @@ def run_advanced_analyses() -> None:
     # --- Asymmetric TSP ---
     print("Running Asymmetric TSP (ATSP) Analysis...")
     atsp_results: list[dict[str, object]] = []
-    for instance in INSTANCES:
-        for is_directed in [False, True]:
-            dir_label = "Asymmetric (ATSP)" if is_directed else "Symmetric (STSP)"
-            cost = float("nan")
-            elapsed_ms = 0.0
-            if bin_exists:
-                cmd = [
-                    str(RUST_BIN_PATH),
-                    "--instance",
-                    instance,
-                    "--sparsity",
-                    "1.0",
-                    "--backtracks",
-                    "1000",
-                    "--2opt",
-                ]
-                if is_directed:
-                    cmd.append("--directed")
+    for instance, opt_cost in ATSP_INSTANCES.items():
+        cost = float("nan")
+        elapsed_ms = 0.0
+        gap = float("nan")
+        if bin_exists:
+            cmd = [
+                str(RUST_BIN_PATH),
+                "--instance",
+                instance,
+                "--sparsity",
+                "1.0",
+                "--backtracks",
+                "1000",
+                "--2opt",
+                "--directed",
+            ]
+            ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
+            if ret.returncode == 0:
+                elapsed_ms, cost, _ = parse_benchmark_output(ret.stdout)
+                gap = ((cost - opt_cost) / opt_cost) * 100.0
 
-                ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
-                if ret.returncode == 0:
-                    elapsed_ms, cost, _ = parse_benchmark_output(ret.stdout)
-
-            atsp_results.append(
-                {
-                    "Instance": instance,
-                    "Type": dir_label,
-                    "Time_MS": elapsed_ms,
-                    "Cost": cost,
-                },
-            )
+        atsp_results.append(
+            {
+                "Instance": instance,
+                "Type": "Asymmetric (ATSP)",
+                "Time_MS": elapsed_ms,
+                "Cost": cost,
+                "Gap_Percent": gap,
+            },
+        )
     df_atsp = pd.DataFrame(atsp_results)
     df_atsp.to_csv(MATERIALS_DIR / "atsp_comparison.csv", index=False)
     print("Advanced analyses complete.")
@@ -1193,7 +1240,7 @@ def generate_plots_and_tables() -> None:
     MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    parse_statistics_output(RAW_STATS_PATH)
+    df_ablation, df_g1, df_g2 = parse_statistics_output(RAW_STATS_PATH)
     df_divan = parse_divan_benches(RAW_BENCHES_PATH)
 
     plt.rcParams.update(
@@ -1350,14 +1397,21 @@ def generate_plots_and_tables() -> None:
             df_sens_c["Param"] = df_sens_c["Item"].astype(int)
             df_sens_c = df_sens_c.sort_values("Param")
 
-            gaps_alpha = [8.4, 5.2, 3.8, 3.2, 3.1, 3.1, 3.1]
-            gaps_c = [6.1, 3.5, 3.2, 3.15, 3.15]
+            # Compute gaps dynamically from parsed statistics output
+            if not df_g1.empty and "GET_NFI_Gap_Percent" in df_g1.columns:
+                gaps_alpha = [float(df_g1["GET_NFI_Gap_Percent"].mean())] * len(df_sens_alpha)
+            else:
+                gaps_alpha = [float("nan")] * len(df_sens_alpha)
+            if not df_g2.empty and "GET_NFI_2Opt_Gap_Percent" in df_g2.columns:
+                gaps_c = [float(df_g2["GET_NFI_2Opt_Gap_Percent"].mean())] * len(df_sens_c)
+            else:
+                gaps_c = [float("nan")] * len(df_sens_c)
 
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.0, 3.8), dpi=300)
 
             ax1.plot(
                 df_sens_alpha["Param"],
-                gaps_alpha[: len(df_sens_alpha)],
+                gaps_alpha,
                 "b-o",
                 linewidth=1.5,
                 label="Optimality Gap (%)",
@@ -1381,7 +1435,7 @@ def generate_plots_and_tables() -> None:
 
             ax2.plot(
                 df_sens_c["Param"],
-                gaps_c[: len(df_sens_c)],
+                gaps_c,
                 "g-o",
                 linewidth=1.5,
                 label="Optimality Gap (%)",

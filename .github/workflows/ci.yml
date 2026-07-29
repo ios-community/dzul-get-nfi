@@ -48,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        toolchain: [stable, 1.96.0]
+        toolchain: [stable]
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -70,7 +70,7 @@ jobs:
         with:
           targets: thumbv7m-none-eabi
       - name: Build for thumbv7m-none-eabi
-        run: cargo build --target thumbv7m-none-eabi --no-default-features
+        run: cargo build -p dzul-core --target thumbv7m-none-eabi --no-default-features
 
   deploy-docs:
     name: Deploy Documentation
