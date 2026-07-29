@@ -1,6 +1,10 @@
-"""Benchmarking script for Dzul's GET-NFI TSP solver.
+"""Benchmarking suite for Dzul's GET-NFI TSP solver.
 
-Uses uv for dependency management and ruff for linting.
+Provides a complete pipeline for compiling the Rust binary, running benchmark
+experiments across standard TSPLIB instances, generating publication-quality
+plots and LaTeX tables, and performing statistical analysis.
+
+This script uses ``uv`` for dependency management and ``ruff`` for linting.
 """
 
 from __future__ import annotations
@@ -21,17 +25,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
-try:
-    import google.colab  # noqa: F401
-
-    IN_COLAB = True
-except ImportError:
-    IN_COLAB = False
-
-if IN_COLAB:
-    REPO_ROOT = Path("/content/dzul-get-nfi")
-else:
-    REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MATERIALS_DIR = REPO_ROOT / "scripts" / "materials"
 PLOTS_DIR = REPO_ROOT / "scripts" / "plots"
@@ -40,12 +34,25 @@ ext = ".exe" if sys.platform == "win32" else ""
 RUST_BIN_PATH = REPO_ROOT / f"dzul_get_nfi_bench{ext}"
 CSV_RESULTS_PATH = MATERIALS_DIR / "get_nfi_benchmark_results.csv"
 BENCH_FILE_PATH = REPO_ROOT / "crates" / "dzul-bench" / "benches" / "solver_benches.rs"
+RAW_STATS_PATH = MATERIALS_DIR / "raw_statistics_output.txt"
+RAW_BENCHES_PATH = MATERIALS_DIR / "raw_benches_output.txt"
+HARDWARE_SPECS_PATH = MATERIALS_DIR / "hardware_specs.md"
 
 PYPROJECT_PATH = REPO_ROOT / "scripts" / "pyproject.toml"
 
+# Lines matching any of these patterns in cargo output are filtered out.
+_CARGO_NOISE_PATTERNS: list[str] = [
+    r"^\s*(Compiling|Downloaded|Downloading|Updating|  Downloaded|  Compiling)",
+    r"^\s*info:",
+    r"^\s*warn:",
+    r"^\s*error\[",
+    r"^\s*Finished\s+`",
+    r"^\s*+\s+`",
+]
+
 
 def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run a uv command with the scripts pyproject.toml."""
+    """Run a ``uv`` command using the scripts ``pyproject.toml``."""
     return subprocess.run(
         [sys.executable, "-m", "uv", *args],
         cwd=REPO_ROOT / "scripts",
@@ -55,8 +62,179 @@ def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProce
     )
 
 
+def _get_cpu_vendor() -> str:
+    """Detect the CPU vendor (``intel``, ``amd``, ``arm``, or ``unknown``)."""
+    system = platform.system()
+    vendor = "unknown"
+    try:
+        if system == "Linux":
+            output = subprocess.check_output(["cat", "/proc/cpuinfo"], text=True)
+            if "GenuineIntel" in output:
+                vendor = "intel"
+            elif "AuthenticAMD" in output:
+                vendor = "amd"
+            elif any(v in output for v in ("ARM", "aarch64", "ARMv")):
+                vendor = "arm"
+        elif system == "Darwin":
+            output = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True)
+            lower = output.lower()
+            if "intel" in lower:
+                vendor = "intel"
+            elif "amd" in lower:
+                vendor = "amd"
+            elif "apple m" in lower:
+                vendor = "arm"
+        elif system == "Windows":
+            proc = platform.processor().lower()
+            if "intel" in proc:
+                vendor = "intel"
+            elif "amd" in proc:
+                vendor = "amd"
+            elif "arm" in proc:
+                vendor = "arm"
+    except Exception:  # noqa: BLE001
+        pass
+    return vendor
+
+
+def _get_cpu_pinning_prefix() -> str:
+    """Return a shell-command prefix that pins execution to a single CPU core.
+
+    Behaviour by platform:
+
+    - **Linux** (all vendors): returns ``taskset -c 0 `` when ``taskset`` is
+      available.
+    - **Windows**: returns an empty string; pinning is handled inside
+      :func:`_run_cargo_with_memory` via ``psutil`` after process creation.
+    - **macOS**: returns ``""`` (no built-in shell-level pinning tool).
+
+    Returns:
+        The prefix string (trailing space), or an empty string when pinning
+        is not available for the current platform.
+
+    """
+    if sys.platform == "linux":
+        if shutil.which("taskset") is not None:
+            return "taskset -c 0 "
+    return ""
+
+
+def _is_noise_line(line: str) -> bool:
+    """Return ``True`` if the line is cargo build noise that should be filtered."""
+    return any(re.search(p, line) for p in _CARGO_NOISE_PATTERNS)
+
+
+def _run_cargo_with_memory(
+    cmd: str,
+    *,
+    pin_cpu: bool = True,
+) -> tuple[str, int, float, float]:
+    """Run a cargo command with optional CPU pinning and memory tracking.
+
+    CPU pinning strategy by platform:
+
+    - **Linux**: ``taskset -c 0 `` is prepended to the shell command.
+    - **Windows**: the process's affinity mask is set to CPU 0 via psutil
+      after creation.
+    - **macOS**: CPU pinning is not supported (no built-in tool).
+
+    Args:
+        cmd: The full cargo command string to execute.
+        pin_cpu: When ``True``, attempt to pin execution to a single CPU core.
+
+    Returns:
+        A tuple of ``(filtered_stdout, return_code, peak_rss_mb, peak_uss_mb)``.
+
+    Raises:
+        ImportError: If ``psutil`` is not installed.
+
+    """
+    try:
+        import psutil
+    except ImportError as exc:
+        msg = "psutil not installed. Run setup_environment() first."
+        raise ImportError(msg) from exc
+
+    prefix = _get_cpu_pinning_prefix() if pin_cpu else ""
+    full_cmd = f"{prefix}{cmd}"
+    print(f"Executing: {full_cmd}")
+
+    process = subprocess.Popen(
+        full_cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    # Windows: set affinity to CPU 0 after process starts
+    if pin_cpu and sys.platform == "win32":
+        try:
+            ps_proc = psutil.Process(process.pid)
+            ps_proc.cpu_affinity([0])
+        except (psutil.AccessDenied, psutil.NoSuchProcess, AttributeError):
+            pass
+
+    peak_rss = 0
+    peak_uss = 0
+    raw_lines: list[str] = []
+    filtered_lines: list[str] = []
+
+    try:
+        ps_proc = psutil.Process(process.pid)
+        children = []
+
+        for line in iter(process.stdout.readline, ""):
+            raw_lines.append(line)
+            if _is_noise_line(line):
+                pass  # skip noise
+            else:
+                filtered_lines.append(line)
+                print(line, end="")
+                sys.stdout.flush()
+
+            # Track memory of the process tree
+            try:
+                current_children = ps_proc.children(recursive=True)
+                children = current_children
+            except psutil.NoSuchProcess:
+                pass
+
+            for proc in [ps_proc, *children]:
+                try:
+                    mem = proc.memory_info()
+                    if mem.rss > peak_rss:
+                        peak_rss = mem.rss
+                    try:
+                        full_mem = proc.memory_full_info()
+                        if full_mem.uss > peak_uss:
+                            peak_uss = full_mem.uss
+                    except (psutil.AccessDenied, AttributeError):
+                        peak_uss = mem.rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    except psutil.NoSuchProcess:
+        pass
+
+    process.stdout.close()
+    return_code = process.wait()
+
+    return "".join(filtered_lines), return_code, peak_rss / (1024**2), peak_uss / (1024**2)
+
+
 def get_criterion_estimates(benchmark_id: str) -> tuple[float | None, float | None]:
-    """Extract mean/std from Criterion estimates.json."""
+    """Extract the mean and standard deviation from a Criterion ``estimates.json``.
+
+    Args:
+        benchmark_id: The name of the benchmark group whose estimates should be
+            loaded.
+
+    Returns:
+        A tuple of ``(mean_ms, std_dev_ms)``, or ``(None, None)`` when no match
+        is found or the file cannot be read.
+
+    """
     criterion_dir = REPO_ROOT / "target" / "criterion"
     if not criterion_dir.exists():
         return None, None
@@ -87,61 +265,49 @@ def get_criterion_estimates(benchmark_id: str) -> tuple[float | None, float | No
 
 
 def setup_environment() -> None:
-    """Install Python deps via uv, verify Rust toolchain."""
-    if IN_COLAB:
-        print("Running in Google Colab. Setting up repository...")
-        os.chdir("/content")
-        if not REPO_ROOT.exists():
-            subprocess.run(
-                ["git", "clone", "https://github.com/ios-community/dzul-get-nfi.git"],
-                check=False,
-            )
-        os.chdir(str(REPO_ROOT))
+    """Verify the project structure and install Python dependencies via ``uv``.
 
-        if shutil.which("rustc") is None:
-            print("Installing Rust toolchain...")
-            subprocess.run(
-                "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
-                shell=True,
-                check=False,
-            )
-            os.environ["PATH"] = f"{os.environ['HOME']}/.cargo/bin:{os.environ['PATH']}"
+    Raises:
+        FileNotFoundError: If the ``Cargo.toml`` or benchmark source file is
+            missing.
 
-        print("Installing Python dependencies via uv...")
+    """
+    if not (REPO_ROOT / "Cargo.toml").exists():
+        msg = (
+            f"Cargo.toml not found at: {REPO_ROOT}\n"
+            "Please ensure this script is located inside the 'scripts/' directory."
+        )
+        raise FileNotFoundError(msg)
+
+    if not BENCH_FILE_PATH.exists():
+        msg = (
+            f"Benchmark source file not found at: {BENCH_FILE_PATH}\nPlease verify 'benches/solver_benches.rs' exists."
+        )
+        raise FileNotFoundError(msg)
+
+    missing_deps: list[str] = []
+    for dep in ["psutil", "scipy", "pandas", "matplotlib", "numpy", "jinja2"]:
+        try:
+            __import__(dep)
+        except ImportError:
+            missing_deps.append(dep)
+
+    if missing_deps:
+        print(f"Missing deps {missing_deps}, installing via uv...")
         _run_uv(["pip", "install", "-q", "-e", "."], check=False)
-    else:
-        print("Running in local environment.")
-        if not (REPO_ROOT / "Cargo.toml").exists():
-            msg = (
-                f"Cargo.toml not found at: {REPO_ROOT}\n"
-                "Please ensure this script is located inside the 'scripts/' directory."
-            )
-            raise FileNotFoundError(msg)
-
-        if not BENCH_FILE_PATH.exists():
-            msg = (
-                f"Benchmark source file not found at: {BENCH_FILE_PATH}\n"
-                "Please verify 'benches/solver_benches.rs' exists."
-            )
-            raise FileNotFoundError(msg)
-
-        # Verify deps installed via uv
-        missing_deps: list[str] = []
-        for dep in ["psutil", "scipy", "pandas", "matplotlib", "numpy", "jinja2"]:
-            try:
-                __import__(dep)
-            except ImportError:
-                missing_deps.append(dep)
-
-        if missing_deps:
-            print(f"Missing deps {missing_deps}, installing via uv...")
-            _run_uv(["pip", "install", "-q", "-e", "."], check=False)
 
     print("Environment setup verified.")
 
 
 def lint_script() -> None:
-    """Run ruff check and ruff format check on Python files."""
+    """Run ``ruff check`` and ``ruff format --check`` on this script.
+
+    Uses the project's ``pyproject.toml`` configuration for both tools.
+
+    Raises:
+        SystemExit: If either the lint or format check fails.
+
+    """
     print("Running ruff lint (strict ALL)...")
     scripts_dir = REPO_ROOT / "scripts"
     result = subprocess.run(
@@ -177,8 +343,20 @@ def lint_script() -> None:
     print("Ruff format check passed.")
 
 
-def profile_hardware() -> None:
-    """Print hardware specification report."""
+def _collect_hardware_specs() -> dict[str, str]:
+    """Collect hardware specifications into a dictionary.
+
+    Detects the CPU vendor (Intel, AMD, ARM, unknown) via
+    :func:`_get_cpu_vendor` and the CPU model via platform-specific commands.
+
+    Raises:
+        ImportError: If ``psutil`` is not installed.
+
+    Returns:
+        A dict with keys ``OS``, ``CPU Vendor``, ``CPU Model``,
+        ``Total RAM``, and ``CPU Pinning``.
+
+    """
     try:
         import psutil
     except ImportError as exc:
@@ -188,6 +366,7 @@ def profile_hardware() -> None:
     specs: dict[str, str] = {}
     system = platform.system()
     specs["OS"] = f"{system} {platform.release()}"
+    specs["CPU Vendor"] = _get_cpu_vendor()
 
     if system == "Linux":
         try:
@@ -218,23 +397,132 @@ def profile_hardware() -> None:
     except Exception:  # noqa: BLE001
         specs["Total RAM"] = "Unknown"
 
-    print("=" * 60)
-    print("          HARDWARE SPECIFICATION REPORT")
-    print("=" * 60)
-    print(f"OS          : {specs['OS']}")
-    print(f"CPU Model   : {specs['CPU Model']}")
-    print(f"Total RAM   : {specs['Total RAM']}")
-    print("=" * 60)
-    print("\nDraft text for your paper's 'Experimental Setup' section:")
-    print(
+    if sys.platform == "linux" and shutil.which("taskset") is not None:
+        specs["CPU Pinning"] = "taskset -c 0 (Linux)"
+    elif sys.platform == "win32":
+        specs["CPU Pinning"] = "psutil cpu_affinity([0]) (Windows)"
+    else:
+        specs["CPU Pinning"] = "None"
+
+    return specs
+
+
+def _format_hardware_specs(specs: dict[str, str]) -> tuple[str, str]:
+    """Format hardware specs into a console report and a paper-ready paragraph."""
+    report = (
+        "=" * 60
+        + "\n          HARDWARE SPECIFICATION REPORT\n"
+        + "=" * 60
+        + f"\nOS          : {specs['OS']}"
+        + f"\nCPU Vendor  : {specs['CPU Vendor']}"
+        + f"\nCPU Model   : {specs['CPU Model']}"
+        + f"\nTotal RAM   : {specs['Total RAM']}"
+        + f"\nCPU Pinning : {specs['CPU Pinning']}"
+        + "\n"
+        + "=" * 60
+    )
+
+    paragraph = (
         f'"All experiments were executed on an environment running {specs["OS"]}, '
         f"equipped with an {specs['CPU Model']} processor and {specs['Total RAM']} of total physical memory. "
         f'To ensure deterministic timing, the benchmark process was pinned to a single CPU core with high priority."'
     )
 
+    return report, paragraph
+
+
+def profile_hardware() -> None:
+    """Print a hardware specification report and save it to ``HARDWARE_SPECS_PATH``.
+
+    Gathers the operating system, CPU model, total physical RAM, and CPU
+    pinning status using ``psutil`` and platform-specific commands.
+
+    Raises:
+        ImportError: If ``psutil`` is not installed.
+
+    """
+    specs = _collect_hardware_specs()
+    report, paragraph = _format_hardware_specs(specs)
+
+    print(report)
+    print("\nDraft text for your paper's 'Experimental Setup' section:")
+    print(paragraph)
+
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    markdown = (
+        "| Hardware / Software Property | Value |\n"
+        "| :--- | :--- |\n"
+        f"| **Operating System** | `{specs['OS']}` |\n"
+        f"| **CPU Vendor** | `{specs['CPU Vendor']}` |\n"
+        f"| **CPU Model** | `{specs['CPU Model']}` |\n"
+        f"| **Total RAM** | `{specs['Total RAM']}` |\n"
+        f"| **CPU Pinning** | `{specs['CPU Pinning']}` |\n"
+    )
+    HARDWARE_SPECS_PATH.write_text(markdown)
+    print(f"Hardware specs saved to: {HARDWARE_SPECS_PATH}")
+
+
+def run_statistics_suite() -> None:
+    """Run the statistical benchmark suite via ``cargo test --test statistics``.
+
+    Executes the Rust integration tests that produce the Group 1, Group 2, and
+    2-Opt ablation tables. The raw output is filtered to remove compilation
+    noise and saved to ``RAW_STATS_PATH``. Memory usage of the entire cargo
+    process tree is tracked.
+
+    Raises:
+        ImportError: If ``psutil`` is not installed.
+
+    """
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = "cargo test --features std --test statistics -- --nocapture --test-threads=1"
+    filtered_out, ret, rss_mb, uss_mb = _run_cargo_with_memory(cmd, pin_cpu=True)
+    RAW_STATS_PATH.write_text(filtered_out)
+    print(f"Peak RSS: {rss_mb:.2f} MB | Peak USS: {uss_mb:.2f} MB")
+    if ret == 0:
+        print("Statistical benchmark suite completed successfully.")
+    else:
+        msg = f"cargo test exited with code {ret}. Check {RAW_STATS_PATH} for details."
+        raise RuntimeError(msg)
+
+
+def run_bench_suite() -> None:
+    """Run the Divan microbenchmark suite via ``cargo bench --bench solver_benches``.
+
+    Executes all Divan benchmarks (ablation, GET-NFI, GET-NFI+2-Opt, NN,
+    NN+2-Opt, sensitivity sweeps). The raw output is filtered and saved to
+    ``RAW_BENCHES_PATH``. Memory usage of the entire cargo process tree is
+    tracked.
+
+    Raises:
+        ImportError: If ``psutil`` is not installed.
+
+    """
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = "cargo bench --features std --bench solver_benches"
+    filtered_out, ret, rss_mb, uss_mb = _run_cargo_with_memory(cmd, pin_cpu=True)
+    RAW_BENCHES_PATH.write_text(filtered_out)
+    print(f"Peak RSS: {rss_mb:.2f} MB | Peak USS: {uss_mb:.2f} MB")
+    if ret == 0:
+        print("Microbenchmark suite completed successfully.")
+    else:
+        msg = f"cargo bench exited with code {ret}. Check {RAW_BENCHES_PATH} for details."
+        raise RuntimeError(msg)
+
 
 def compile_rust_binary() -> None:
-    """Compile Rust binary with aggressive optimizations."""
+    """Compile the Rust benchmark binary with aggressive optimisations.
+
+    Sets ``RUSTFLAGS=-C target-cpu=native`` as well as ``LTO`` and
+    ``codegen-units`` environment variables. The resulting binary is copied to
+    the scripts directory.
+
+    Raises:
+        RuntimeError: If ``cargo`` is not installed or compilation fails.
+        FileNotFoundError: If the compiled binary cannot be located after a
+            successful build.
+
+    """
     if shutil.which("cargo") is None:
         msg = "Rust compiler ('cargo') not found.\nInstall Rust: https://www.rust-lang.org/"
         raise RuntimeError(msg)
@@ -272,7 +560,19 @@ def compile_rust_binary() -> None:
 
 
 def parse_benchmark_output(stdout: str) -> tuple[float, float, str]:
-    """Parse solver binary stdout for ELAPSED_MS, COST, TOUR_TYPE."""
+    """Parse the solver binary's stdout for elapsed time, cost, and tour type.
+
+    Looks for lines prefixed with ``ELAPSED_MS:``, ``COST:``, and
+    ``TOUR_TYPE:``.
+
+    Args:
+        stdout: The raw stdout produced by the Rust solver binary.
+
+    Returns:
+        A tuple of ``(elapsed_ms, cost, tour_type)``. Defaults to
+        ``(0.0, 0.0, "StrictCycle")`` when a field is missing.
+
+    """
     elapsed_ms = 0.0
     cost = 0.0
     tour_type = "StrictCycle"
@@ -293,10 +593,20 @@ INSTANCES: dict[str, float] = {
     "lin318": 42_029.0,
     "pcb442": 50_778.0,
 }
+"""Mapping of TSPLIB instance names to their known optimal tour costs."""
 
 
 def run_main_experiments() -> None:
-    """Run full experiment matrix: instances x sparsity x 2opt."""
+    """Run the full experiment matrix: instances x sparsity x 2-Opt.
+
+    Iterates over every combination of instance, sparsity level, and algorithm
+    variant, executes the solver binary for each combination while measuring
+    peak RSS and USS memory, and saves the results to ``CSV_RESULTS_PATH``.
+
+    Raises:
+        ImportError: If ``pandas`` or ``psutil`` is not installed.
+
+    """
     try:
         import pandas as pd
         import psutil
@@ -316,6 +626,7 @@ def run_main_experiments() -> None:
     def run_benchmark_process(
         cmd: list[str],
     ) -> tuple[int, str, str, int, int]:
+        """Execute the solver binary and measure peak RSS and USS memory."""
         p = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -405,7 +716,17 @@ def run_main_experiments() -> None:
 
 
 def run_advanced_analyses() -> None:
-    """Sparsity phase transition, Pareto frontier, ATSP analysis."""
+    """Run sparsity phase transition, Pareto frontier, and ATSP analyses.
+
+    Generates CSV results and PDF plots for:
+    - Sparsity phase transition (eil51 across nine sparsity levels).
+    - Pareto frontier of backtrack limit vs optimality gap (kroA100).
+    - Asymmetric TSP comparison across all instances.
+
+    Raises:
+        ImportError: If ``matplotlib`` or ``pandas`` is not installed.
+
+    """
     try:
         import matplotlib.pyplot as plt
         import pandas as pd
@@ -567,7 +888,16 @@ def run_advanced_analyses() -> None:
 
 
 def run_statistical_analysis() -> None:
-    """Wilcoxon signed-rank tests on benchmark results."""
+    """Perform Wilcoxon signed-rank tests on the benchmark results.
+
+    Compares optimality gaps and execution times between GET-NFI and 2-Opt,
+    and also compares GET-NFI gaps on complete versus incomplete graphs.
+
+    Raises:
+        FileNotFoundError: If the main experiment CSV has not been generated.
+        ImportError: If ``numpy``, ``pandas``, or ``scipy`` is not installed.
+
+    """
     if not CSV_RESULTS_PATH.exists():
         msg = f"Benchmark results file not found at: {CSV_RESULTS_PATH}\nRun run_main_experiments() first."
         raise FileNotFoundError(msg)
@@ -581,6 +911,7 @@ def run_statistical_analysis() -> None:
         raise ImportError(msg) from exc
 
     def calculate_rank_biserial(x: np.ndarray, y: np.ndarray) -> float:
+        """Calculate the rank-biserial correlation as a non-parametric effect size."""
         diff = x - y
         diff = diff[diff != 0]
         n = len(diff)
@@ -648,7 +979,16 @@ def run_statistical_analysis() -> None:
 
 
 def parse_time_to_ms(time_str: str, unit_str: str) -> float:
-    """Convert a time string with unit (ms, µs, ns, s) to milliseconds."""
+    """Convert a numeric time string with a unit suffix to milliseconds.
+
+    Args:
+        time_str: The numeric portion of the time value.
+        unit_str: The unit suffix (``ms``, ``µs``, ``ns``, or ``s``).
+
+    Returns:
+        The time value normalised to milliseconds.
+
+    """
     val = float(time_str)
     unit = unit_str.strip()
     if unit == "µs":
@@ -661,7 +1001,20 @@ def parse_time_to_ms(time_str: str, unit_str: str) -> float:
 
 
 def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Parse Divan statistics output into DataFrames for ablation, group1, group2."""
+    """Parse Divan statistics text output into DataFrames for ablation and group results.
+
+    Extracts the ablation study table and both constructive-heuristic groups
+    (Group 1: no 2-Opt; Group 2: with 2-Opt) from the raw Divan output and
+    saves each as a CSV under ``MATERIALS_DIR``.
+
+    Args:
+        filepath: Path to the raw Divan statistics output file.
+
+    Returns:
+        A tuple of ``(df_ablation, df_group1, df_group2)``. Each may be empty
+        when the corresponding section is not found.
+
+    """
     import pandas as pd
 
     if not filepath.exists():
@@ -757,7 +1110,21 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
 
 
 def parse_divan_benches(filepath: Path) -> pd.DataFrame:
-    """Parse Divan benchmark text output into a DataFrame."""
+    """Parse Divan benchmark text output into a DataFrame.
+
+    Scans a raw Divan console output file for benchmark items under each
+    category and extracts the fastest, slowest, median, and mean times for
+    every entry. The result is also saved as a CSV under ``MATERIALS_DIR``.
+
+    Args:
+        filepath: Path to the raw Divan benchmark output file.
+
+    Returns:
+        A DataFrame with columns ``Category``, ``Item``, ``Fastest_MS``,
+        ``Slowest_MS``, ``Median_MS``, and ``Mean_MS``. Returns an empty
+        DataFrame when the file does not exist.
+
+    """
     import pandas as pd
 
     if not filepath.exists():
@@ -802,7 +1169,20 @@ def parse_divan_benches(filepath: Path) -> pd.DataFrame:
 
 
 def generate_plots_and_tables() -> None:
-    """Generate LaTeX tables, latency/memory plots, and sensitivity analysis figures."""
+    """Generate LaTeX tables and publication-quality figures from parsed results.
+
+    Parses ``RAW_STATS_PATH`` and ``RAW_BENCHES_PATH`` (written by
+    :func:`run_statistics_suite` and :func:`run_bench_suite`) into CSV tables,
+    then produces PDF and PNG figures for the paper under ``PLOTS_DIR``.
+
+    If the old-style ``CSV_RESULTS_PATH`` (from :func:`run_main_experiments`)
+    exists, additional memory-footprint plots and a combined LaTeX table are
+    also generated.
+
+    Raises:
+        ImportError: If ``matplotlib`` or ``pandas`` is not installed.
+
+    """
     try:
         import matplotlib.pyplot as plt
         import pandas as pd
@@ -813,9 +1193,53 @@ def generate_plots_and_tables() -> None:
     MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    parse_statistics_output(REPO_ROOT / "raw_statistics_output.txt")
-    df_divan = parse_divan_benches(REPO_ROOT / "raw_benches_output.txt")
+    parse_statistics_output(RAW_STATS_PATH)
+    df_divan = parse_divan_benches(RAW_BENCHES_PATH)
 
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman"],
+            "font.size": 10,
+            "axes.labelsize": 10,
+            "axes.titlesize": 10,
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "legend.fontsize": 9,
+        },
+    )
+
+    # --- Latency comparison plots from Divan data ---
+    if not df_divan.empty:
+        for benchmark_pair, title_suffix in [
+            ("get_nfi", "GET-NFI (Constructive)"),
+            ("get_nfi_with_2opt", "GET-NFI + 2-Opt"),
+            ("nearest_neighbor", "Nearest Neighbour (NN)"),
+        ]:
+            pair_df = df_divan[df_divan["Category"] == benchmark_pair].copy()
+            if pair_df.empty:
+                continue
+            fig, ax = plt.subplots(figsize=(7.0, 3.8))
+            ax.bar(
+                range(len(pair_df)),
+                pair_df["Mean_MS"],
+                yerr=pair_df["Slowest_MS"] - pair_df["Fastest_MS"],
+                color="#CE412B",
+                capsize=3,
+            )
+            ax.set_xticks(range(len(pair_df)))
+            ax.set_xticklabels(pair_df["Item"], rotation=45, ha="right", fontsize=7)
+            ax.set_ylabel("Execution Time (ms)")
+            ax.set_yscale("log")
+            ax.set_title(f"Latency — {title_suffix}")
+            ax.grid(True, axis="y", linestyle=":", alpha=0.5)
+            plt.tight_layout()
+            safe_name = benchmark_pair
+            plt.savefig(PLOTS_DIR / f"latency_{safe_name}.pdf", format="pdf", bbox_inches="tight")
+            plt.savefig(PLOTS_DIR / f"latency_{safe_name}.png", format="png", dpi=300, bbox_inches="tight")
+            plt.close()
+
+    # --- Legacy experiment table & memory plots (if CSV_RESULTS_PATH exists) ---
     if CSV_RESULTS_PATH.exists():
         df = pd.read_csv(CSV_RESULTS_PATH)
 
@@ -855,19 +1279,6 @@ def generate_plots_and_tables() -> None:
             f.write(r"\end{tabular}" + "\n")
             f.write(r"\end{table*}" + "\n")
 
-        plt.rcParams.update(
-            {
-                "font.family": "serif",
-                "font.serif": ["Times New Roman"],
-                "font.size": 10,
-                "axes.labelsize": 10,
-                "axes.titlesize": 10,
-                "xtick.labelsize": 9,
-                "ytick.labelsize": 9,
-                "legend.fontsize": 9,
-            },
-        )
-
         fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), sharey=True)
         colors = {"GET-NFI": "#CE412B", "2-Opt": "#3776AB"}
         markers = {"GET-NFI": "o", "2-Opt": "s"}
@@ -886,7 +1297,7 @@ def generate_plots_and_tables() -> None:
                     markersize=5,
                 )
             ax.set_xlabel("TSPLIB Instance")
-            if alg_df["Time_MS"].gt(0).any():
+            if not alg_df.empty and alg_df["Time_MS"].gt(0).any():
                 ax.set_yscale("log")
             ax.set_title(f"Graph Type: {sparsity}")
             ax.grid(True, which="both", linestyle=":", alpha=0.5)
@@ -900,33 +1311,35 @@ def generate_plots_and_tables() -> None:
 
         fig, ax = plt.subplots(figsize=(6.0, 3.8))
         complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
-        ax.plot(
-            complete_df["Instance"],
-            complete_df["RSS_KB"] / 1024,
-            "-o",
-            color="#CE412B",
-            label="Peak RSS (MB)",
-            linewidth=1.5,
-        )
-        ax.plot(
-            complete_df["Instance"],
-            complete_df["USS_KB"] / 1024,
-            "--d",
-            color="#3776AB",
-            label="Peak USS (MB)",
-            linewidth=1.5,
-        )
-        ax.set_xlabel("TSPLIB Instance")
-        ax.set_ylabel("Physical Memory (MB)")
-        ax.set_title("Memory Footprint vs. Instance Size")
-        ax.grid(True, which="both", linestyle=":", alpha=0.5)
-        ax.legend(loc="upper left")
-        plt.tight_layout()
-        plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.pdf", format="pdf", bbox_inches="tight")
-        plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.png", format="png", dpi=300, bbox_inches="tight")
-        plt.close()
+        if not complete_df.empty:
+            ax.plot(
+                complete_df["Instance"],
+                complete_df["RSS_KB"] / 1024,
+                "-o",
+                color="#CE412B",
+                label="Peak RSS (MB)",
+                linewidth=1.5,
+            )
+            ax.plot(
+                complete_df["Instance"],
+                complete_df["USS_KB"] / 1024,
+                "--d",
+                color="#3776AB",
+                label="Peak USS (MB)",
+                linewidth=1.5,
+            )
+            ax.set_xlabel("TSPLIB Instance")
+            ax.set_ylabel("Physical Memory (MB)")
+            ax.set_title("Memory Footprint vs. Instance Size")
+            ax.grid(True, which="both", linestyle=":", alpha=0.5)
+            ax.legend(loc="upper left")
+            plt.tight_layout()
+            plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.pdf", format="pdf", bbox_inches="tight")
+            plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.png", format="png", dpi=300, bbox_inches="tight")
+            plt.close()
 
     if not df_divan.empty:
+        # --- Sensitivity analysis figures ---
         df_sens_alpha = df_divan[df_divan["Category"] == "sensitivity_threshold_alpha"].copy()
         df_sens_c = df_divan[df_divan["Category"] == "sensitivity_backtrack_factor"].copy()
 
@@ -999,7 +1412,16 @@ def generate_plots_and_tables() -> None:
 
 
 def package_and_download() -> None:
-    """Package materials and plots into zip."""
+    """Package generated materials and plots into a zip archive.
+
+    Creates a ``get_nfi_results.zip`` archive containing the contents of
+    ``MATERIALS_DIR`` and ``PLOTS_DIR``.
+
+    Raises:
+        FileNotFoundError: If neither ``MATERIALS_DIR`` nor ``PLOTS_DIR``
+            contain any files.
+
+    """
     zip_path = REPO_ROOT / "scripts" / "get_nfi_results.zip"
 
     has_materials = MATERIALS_DIR.exists() and any(MATERIALS_DIR.iterdir())
@@ -1020,29 +1442,32 @@ def package_and_download() -> None:
                 zipf.write(file, arcname=f"plots/{file.name}")
 
     print("Packaging complete.")
-
-    if IN_COLAB:
-        try:
-            from google.colab import files
-
-            print("Google Colab detected. Triggering browser download...")
-            files.download(str(zip_path))
-        except ImportError:
-            pass
-    else:
-        print("Local environment detected. Artifacts are saved in:")
-        print(f"  Materials: {MATERIALS_DIR}")
-        print(f"  Plots:     {PLOTS_DIR}")
-        print(f"Zip archive saved at: {zip_path}")
+    print("Artifacts are saved in:")
+    print(f"  Materials: {MATERIALS_DIR}")
+    print(f"  Plots:     {PLOTS_DIR}")
+    print(f"  Zip archive: {zip_path}")
 
 
 def main() -> None:
-    """Run the full benchmark pipeline."""
+    """Run the authoritative benchmark pipeline.
+
+    Pipeline steps:
+    1. Environment setup and linting
+    2. Hardware profiling
+    3. ``cargo test --test statistics`` — Group 1, Group 2, ablation
+    4. ``cargo bench --bench solver_benches`` — Divan microbenchmarks
+    5. Advanced analyses (sparsity, Pareto, ATSP) via standalone binary
+    6. Parse outputs and generate CSVs, LaTeX tables, publication figures
+    7. Package all artifacts into a zip archive
+
+    Use ``--plots`` to skip all experiments and only regenerate figures from
+    previously saved results.
+    """
     parser = argparse.ArgumentParser(description="Dzul's GET-NFI benchmark suite")
     parser.add_argument(
         "--plots",
         action="store_true",
-        help="Skip experiments and compile; only regenerate plots/tables from existing results",
+        help="Skip experiments; only regenerate plots/tables from existing results",
     )
     args = parser.parse_args()
 
@@ -1055,10 +1480,16 @@ def main() -> None:
     setup_environment()
     lint_script()
     profile_hardware()
+
+    # Core benchmarks (authoritative — matches notebook output)
+    run_statistics_suite()
+    run_bench_suite()
+
+    # Additional experiments that require the standalone binary
     compile_rust_binary()
-    run_main_experiments()
     run_advanced_analyses()
-    run_statistical_analysis()
+
+    # Generate all outputs
     generate_plots_and_tables()
     package_and_download()
 
