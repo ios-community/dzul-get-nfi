@@ -9,3 +9,6 @@ scripts/dzul_get_nfi.ipynb
 scripts/.venv/
 scripts/.ruff_cache/
 scripts/__pycache__/
+scripts/materials/
+scripts/plots/
+scripts/get_nfi_results.zip

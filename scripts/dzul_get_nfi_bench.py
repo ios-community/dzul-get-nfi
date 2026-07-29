@@ -5,15 +5,21 @@ Uses uv for dependency management and ruff for linting.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import time
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 try:
     import google.colab  # noqa: F401
@@ -27,30 +33,22 @@ if IN_COLAB:
 else:
     REPO_ROOT = Path(__file__).resolve().parent.parent
 
+MATERIALS_DIR = REPO_ROOT / "scripts" / "materials"
+PLOTS_DIR = REPO_ROOT / "scripts" / "plots"
+
 ext = ".exe" if sys.platform == "win32" else ""
 RUST_BIN_PATH = REPO_ROOT / f"dzul_get_nfi_bench{ext}"
-CSV_RESULTS_PATH = REPO_ROOT / "results" / "get_nfi_benchmark_results.csv"
-BENCH_FILE_PATH = REPO_ROOT / "benches" / "solver_benches.rs"
+CSV_RESULTS_PATH = MATERIALS_DIR / "get_nfi_benchmark_results.csv"
+BENCH_FILE_PATH = REPO_ROOT / "crates" / "dzul-bench" / "benches" / "solver_benches.rs"
 
-PYPROJECT_PATH = REPO_ROOT / "pyproject.toml"
+PYPROJECT_PATH = REPO_ROOT / "scripts" / "pyproject.toml"
 
 
 def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run a uv command with the project pyproject.toml."""
+    """Run a uv command with the scripts pyproject.toml."""
     return subprocess.run(
         [sys.executable, "-m", "uv", *args],
-        cwd=REPO_ROOT,
-        check=check,
-        capture_output=True,
-        text=True,
-    )
-
-
-def _run_ruff(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run ruff via uvx (isolated tool execution)."""
-    return subprocess.run(
-        [sys.executable, "-m", "uvx", "ruff", *args],
-        cwd=REPO_ROOT,
+        cwd=REPO_ROOT / "scripts",
         check=check,
         capture_output=True,
         text=True,
@@ -145,15 +143,33 @@ def setup_environment() -> None:
 def lint_script() -> None:
     """Run ruff check and ruff format check on Python files."""
     print("Running ruff lint (strict ALL)...")
-    result = _run_ruff(["check", "--config", str(PYPROJECT_PATH), "scripts/", "scripts/**/*.py"], check=False)
+    scripts_dir = REPO_ROOT / "scripts"
+    result = subprocess.run(
+        ["uvx", "ruff", "check", "--config", str(PYPROJECT_PATH), str(scripts_dir / "dzul_get_nfi_bench.py")],
+        cwd=scripts_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     if result.returncode != 0:
         print(f"Ruff check failed:\n{result.stdout}\n{result.stderr}")
         raise SystemExit(1)
     print("Ruff check passed.")
 
-    result = _run_ruff(
-        ["format", "--check", "--config", str(PYPROJECT_PATH), "scripts/"],
+    result = subprocess.run(
+        [
+            "uvx",
+            "ruff",
+            "format",
+            "--check",
+            "--config",
+            str(PYPROJECT_PATH),
+            str(scripts_dir / "dzul_get_nfi_bench.py"),
+        ],
+        cwd=scripts_dir,
         check=False,
+        capture_output=True,
+        text=True,
     )
     if result.returncode != 0:
         print(f"Ruff format check failed:\n{result.stdout}\n{result.stderr}")
@@ -223,9 +239,6 @@ def compile_rust_binary() -> None:
         msg = "Rust compiler ('cargo') not found.\nInstall Rust: https://www.rust-lang.org/"
         raise RuntimeError(msg)
 
-    RESULTS_DIR = REPO_ROOT / "results"
-    RESULTS_DIR.mkdir(exist_ok=True)
-
     print("Compiling Rust binary...")
     env = os.environ.copy()
     env["RUSTFLAGS"] = "-C target-cpu=native"
@@ -291,10 +304,9 @@ def run_main_experiments() -> None:
         msg = "Missing Python dependencies. Run setup_environment() first."
         raise ImportError(msg) from exc
 
-    RESULTS_DIR = REPO_ROOT / "results"
-    RESULTS_DIR.mkdir(exist_ok=True)
-
     SPARSITY_VALUES = [1.0, 0.5]
+
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
 
     bin_exists = RUST_BIN_PATH.exists()
     if not bin_exists:
@@ -343,8 +355,9 @@ def run_main_experiments() -> None:
                 sparsity_label = "Complete" if sparsity == 1.0 else "Incomplete (50%)"
                 print(f"Processing: {instance} | {sparsity_label} | {opt_label}")
 
-                cost = opt_cost
+                cost = float("nan")
                 tour_type = "N/A"
+                elapsed_ms = 0.0
                 rss = 0.0
                 uss = 0.0
 
@@ -363,24 +376,21 @@ def run_main_experiments() -> None:
 
                     ret, stdout, _stderr, rss, uss = run_benchmark_process(cmd)
                     if ret == 0:
-                        _, cost, tour_type = parse_benchmark_output(stdout)
+                        elapsed_ms, cost, tour_type = parse_benchmark_output(stdout)
 
-                bench_suffix = "get_nfi_with_2opt" if enable_2opt else "get_nfi"
-                bench_id = f"{instance}_{bench_suffix}"
+                if tour_type == "N/A":
+                    cost = float("nan")
+                    gap = float("nan")
+                else:
+                    gap = ((cost - opt_cost) / opt_cost) * 100.0
 
-                mean_ms, std_dev_ms = get_criterion_estimates(bench_id)
-                if mean_ms is None:
-                    print(f"Notice: Criterion estimate for '{bench_id}' not found. Defaulting to 0.0 ms.")
-                    mean_ms, std_dev_ms = 0.0, 0.0
-
-                gap = ((cost - opt_cost) / opt_cost) * 100.0
                 results.append(
                     {
                         "Instance": instance,
                         "Sparsity": sparsity_label,
                         "Algorithm": opt_label,
-                        "Time_MS": mean_ms,
-                        "Time_SD": std_dev_ms,
+                        "Time_MS": elapsed_ms,
+                        "Time_SD": 0.0,
                         "Cost": cost,
                         "Gap_Percent": gap,
                         "RSS_KB": rss / 1024,
@@ -403,8 +413,8 @@ def run_advanced_analyses() -> None:
         msg = "Missing Python dependencies. Run setup_environment() first."
         raise ImportError(msg) from exc
 
-    RESULTS_DIR = REPO_ROOT / "results"
-    RESULTS_DIR.mkdir(exist_ok=True)
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     bin_exists = RUST_BIN_PATH.exists()
     if not bin_exists:
@@ -418,13 +428,9 @@ def run_advanced_analyses() -> None:
     for sparsity in sparsity_levels:
         print(f"  Testing Sparsity Level: {sparsity * 100:.0f}%")
 
-        bench_id = "ablation_get_without_nfi" if sparsity == 0.5 else "eil51_get_nfi_with_2opt"
-        mean_ms, _ = get_criterion_estimates(bench_id)
-        if mean_ms is None:
-            print(f"  Notice: Estimate for '{bench_id}' not found. Defaulting to 0.0 ms.")
-            mean_ms = 0.0
-
-        cost = 0.0
+        cost = float("nan")
+        elapsed_ms = 0.0
+        tour_type = "N/A"
         if bin_exists:
             cmd = [
                 str(RUST_BIN_PATH),
@@ -438,13 +444,13 @@ def run_advanced_analyses() -> None:
             ]
             ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
             if ret.returncode == 0:
-                _, cost, _ = parse_benchmark_output(ret.stdout)
+                elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
 
         opt_cost = INSTANCES["eil51"]
-        gap = ((cost - opt_cost) / opt_cost) * 100.0 if cost > 0 else 0.0
-        sparsity_results.append({"Sparsity": sparsity, "Time_MS": mean_ms, "Gap_Percent": gap})
+        gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
+        sparsity_results.append({"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap})
     df_sparsity = pd.DataFrame(sparsity_results)
-    df_sparsity.to_csv(RESULTS_DIR / "sparsity_phase_transition.csv", index=False)
+    df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
     fig, ax1 = plt.subplots(figsize=(6.0, 3.8))
     color = "tab:red"
@@ -462,7 +468,7 @@ def run_advanced_analyses() -> None:
 
     plt.title("Sparsity Phase Transition Analysis (eil51)")
     fig.tight_layout()
-    plt.savefig(RESULTS_DIR / "sparsity_phase_transition.pdf", format="pdf", bbox_inches="tight")
+    plt.savefig(PLOTS_DIR / "sparsity_phase_transition.pdf", format="pdf", bbox_inches="tight")
     plt.close()
 
     # --- Pareto Frontier ---
@@ -470,33 +476,29 @@ def run_advanced_analyses() -> None:
     backtrack_limits = [100, 1000, 5000]
     pareto_results: list[dict[str, float]] = []
     for limit in backtrack_limits:
-        bench_id = f"sensitivity_backtracks_{limit}"
-        mean_ms, _ = get_criterion_estimates(bench_id)
-        if mean_ms is None:
-            print(f"  Notice: Estimate for '{bench_id}' not found. Defaulting to 0.0 ms.")
-            mean_ms = 0.0
-
-        cost = 0.0
+        cost = float("nan")
+        elapsed_ms = 0.0
+        tour_type = "N/A"
         if bin_exists:
             cmd = [
                 str(RUST_BIN_PATH),
                 "--instance",
                 "kroA100",
                 "--sparsity",
-                "0.5",
+                "1.0",
                 "--backtracks",
                 str(limit),
                 "--2opt",
             ]
             ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
             if ret.returncode == 0:
-                _, cost, _ = parse_benchmark_output(ret.stdout)
+                elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
 
         opt_cost = INSTANCES["kroA100"]
-        gap = ((cost - opt_cost) / opt_cost) * 100.0 if cost > 0 else 0.0
-        pareto_results.append({"Backtrack_Limit": limit, "Time_MS": mean_ms, "Gap_Percent": gap})
+        gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
+        pareto_results.append({"Backtrack_Limit": limit, "Time_MS": elapsed_ms, "Gap_Percent": gap})
     df_pareto = pd.DataFrame(pareto_results)
-    df_pareto.to_csv(RESULTS_DIR / "pareto_frontier.csv", index=False)
+    df_pareto.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
 
     plt.figure(figsize=(6.0, 3.8))
     plt.plot(
@@ -519,25 +521,20 @@ def run_advanced_analyses() -> None:
 
     plt.xlabel("Execution Time (ms)")
     plt.ylabel("Optimality Gap (%)")
-    plt.title("Pareto Frontier Analysis (kroA100, Sparsity 50%)")
+    plt.title("Pareto Frontier Analysis (kroA100, Complete Graph)")
     plt.grid(True, which="both", linestyle=":", alpha=0.5)
     plt.tight_layout()
-    plt.savefig(RESULTS_DIR / "pareto_frontier.pdf", format="pdf", bbox_inches="tight")
+    plt.savefig(PLOTS_DIR / "pareto_frontier.pdf", format="pdf", bbox_inches="tight")
     plt.close()
 
     # --- Asymmetric TSP ---
     print("Running Asymmetric TSP (ATSP) Analysis...")
     atsp_results: list[dict[str, object]] = []
-    for instance, opt_cost in INSTANCES.items():
+    for instance in INSTANCES:
         for is_directed in [False, True]:
             dir_label = "Asymmetric (ATSP)" if is_directed else "Symmetric (STSP)"
-            bench_id = f"{instance}_get_nfi_with_2opt"
-            mean_ms, _ = get_criterion_estimates(bench_id)
-            if mean_ms is None:
-                print(f"  Notice: Estimate for '{bench_id}' not found. Defaulting to 0.0 ms.")
-                mean_ms = 0.0
-
-            cost = opt_cost
+            cost = float("nan")
+            elapsed_ms = 0.0
             if bin_exists:
                 cmd = [
                     str(RUST_BIN_PATH),
@@ -554,18 +551,18 @@ def run_advanced_analyses() -> None:
 
                 ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
                 if ret.returncode == 0:
-                    _, cost, _ = parse_benchmark_output(ret.stdout)
+                    elapsed_ms, cost, _ = parse_benchmark_output(ret.stdout)
 
             atsp_results.append(
                 {
                     "Instance": instance,
                     "Type": dir_label,
-                    "Time_MS": mean_ms,
+                    "Time_MS": elapsed_ms,
                     "Cost": cost,
                 },
             )
     df_atsp = pd.DataFrame(atsp_results)
-    df_atsp.to_csv(RESULTS_DIR / "atsp_comparison.csv", index=False)
+    df_atsp.to_csv(MATERIALS_DIR / "atsp_comparison.csv", index=False)
     print("Advanced analyses complete.")
 
 
@@ -595,47 +592,44 @@ def run_statistical_analysis() -> None:
         total_rank_sum = n * (n + 1) / 2
         return (pos_sum - neg_sum) / total_rank_sum
 
-    print("=" * 65)
-    print("          DZUL'S GET-NFI STATISTICAL RIGOR REPORT")
-    print("=" * 65)
-
     df_stats = pd.read_csv(CSV_RESULTS_PATH)
     get_nfi_df = df_stats[df_stats["Algorithm"] == "GET-NFI"].sort_values(by=["Instance", "Sparsity"])
     opt_2_df = df_stats[df_stats["Algorithm"] == "2-Opt"].sort_values(by=["Instance", "Sparsity"])
+
+    def _wilcoxon_report(label: str, x: np.ndarray, y: np.ndarray) -> None:
+        """Run Wilcoxon paired test and print formatted results, dropping NaN pairs."""
+        valid = ~(np.isnan(x) | np.isnan(y))
+        xv = x[valid]
+        yv = y[valid]
+        n_valid = len(xv)
+        print(f"{label}:")
+        if n_valid < 2:
+            print("   Insufficient valid paired observations (need >= 2).")
+            return
+        diff = xv - yv
+        if np.all(diff == 0):
+            print("   Statistic: N/A | p-value: N/A | All differences are zero.")
+            return
+        stat_val, p_val = stats.wilcoxon(xv, yv)
+        r_val = calculate_rank_biserial(xv, yv)
+        print(f"   n={n_valid}  Statistic: {stat_val:.4f} | p-value: {p_val:.6f}")
+        print(f"   Effect Size (Rank-Biserial r): {r_val:.4f}")
+        if p_val < 0.05:
+            print("   Result:    SIGNIFICANT (Reject H0 at alpha = 0.05)")
+        else:
+            print("   Result:    NOT SIGNIFICANT")
 
     times_get_nfi = get_nfi_df["Time_MS"].to_numpy()
     times_2opt = opt_2_df["Time_MS"].to_numpy()
     gaps_get_nfi = get_nfi_df["Gap_Percent"].to_numpy()
     gaps_2opt = opt_2_df["Gap_Percent"].to_numpy()
 
-    print("1. Wilcoxon Signed-Rank Test (Optimality Gap: GET-NFI vs 2-Opt):")
-    gap_diff = gaps_get_nfi - gaps_2opt
-    if np.all(gap_diff == 0):
-        print("   Statistic: N/A | p-value: N/A")
-        print("   Effect Size (Rank-Biserial r): 0.0000")
-        print("   Result:    NOT SIGNIFICANT (All differences are zero)")
-    else:
-        stat_gap, p_gap = stats.wilcoxon(gaps_get_nfi, gaps_2opt)
-        r_gap = calculate_rank_biserial(gaps_get_nfi, gaps_2opt)
-        print(f"   Statistic: {stat_gap:.4f} | p-value: {p_gap:.6f}")
-        print(f"   Effect Size (Rank-Biserial r): {r_gap:.4f}")
-        if p_gap < 0.05:
-            print("   Result:    SIGNIFICANT (Reject H0 at alpha = 0.05)")
-        else:
-            print("   Result:    NOT SIGNIFICANT")
+    print("=" * 65)
+    print("          DZUL'S GET-NFI STATISTICAL RIGOR REPORT")
+    print("=" * 65)
+    _wilcoxon_report("1. Wilcoxon Signed-Rank Test (Optimality Gap: GET-NFI vs 2-Opt)", gaps_get_nfi, gaps_2opt)
     print("-" * 65)
-
-    print("2. Wilcoxon Signed-Rank Test (Execution Time: GET-NFI vs 2-Opt):")
-    time_diff = times_get_nfi - times_2opt
-    if np.all(time_diff == 0):
-        print("   Statistic: N/A | p-value: N/A")
-        print("   Effect Size (Rank-Biserial r): 0.0000")
-        print("   Result:    NOT SIGNIFICANT (All differences are zero)")
-    else:
-        stat_time, p_time = stats.wilcoxon(times_get_nfi, times_2opt)
-        r_time = calculate_rank_biserial(times_get_nfi, times_2opt)
-        print(f"   Statistic: {stat_time:.4f} | p-value: {p_time:.6f}")
-        print(f"   Effect Size (Rank-Biserial r): {r_time:.4f}")
+    _wilcoxon_report("2. Wilcoxon Signed-Rank Test (Execution Time: GET-NFI vs 2-Opt)", times_get_nfi, times_2opt)
     print("-" * 65)
 
     complete_gaps = df_stats[(df_stats["Sparsity"] == "Complete") & (df_stats["Algorithm"] == "GET-NFI")][
@@ -647,28 +641,168 @@ def run_statistical_analysis() -> None:
 
     print("3. Wilcoxon Signed-Rank Test (GET-NFI Gaps: Complete vs Incomplete):")
     if len(complete_gaps) == len(incomplete_gaps):
-        comp_diff = complete_gaps - incomplete_gaps
-        if np.all(comp_diff == 0):
-            print("   Statistic: N/A | p-value: N/A")
-            print("   Result:    NOT SIGNIFICANT (All differences are zero)")
-        else:
-            stat_comp, p_comp = stats.wilcoxon(complete_gaps, incomplete_gaps)
-            print(f"   Statistic: {stat_comp:.4f} | p-value: {p_comp:.6f}")
-            if p_comp < 0.05:
-                print("   Result:    SIGNIFICANT (Reject H0 at alpha = 0.05)")
-            else:
-                print("   Result:    NOT SIGNIFICANT")
+        _wilcoxon_report("   Result", complete_gaps, incomplete_gaps)
     else:
         print("   Error: Sample sizes do not match for Complete vs Incomplete gaps.")
     print("=" * 65)
 
 
-def generate_plots_and_tables() -> None:
-    """Generate LaTeX table and benchmark plots."""
-    if not CSV_RESULTS_PATH.exists():
-        msg = f"Benchmark results file not found at: {CSV_RESULTS_PATH}\nRun run_main_experiments() first."
-        raise FileNotFoundError(msg)
+def parse_time_to_ms(time_str: str, unit_str: str) -> float:
+    """Convert a time string with unit (ms, µs, ns, s) to milliseconds."""
+    val = float(time_str)
+    unit = unit_str.strip()
+    if unit == "µs":
+        return val / 1000.0
+    if unit == "ns":
+        return val / 1_000_000.0
+    if unit == "s":
+        return val * 1000.0
+    return val
 
+
+def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Parse Divan statistics output into DataFrames for ablation, group1, group2."""
+    import pandas as pd
+
+    if not filepath.exists():
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    with filepath.open("r", encoding="utf-8") as f:
+        content = f.read()
+
+    ablation_data = []
+    ablation_match = re.search(
+        r"=== 2-Opt Ablation Study ===\n.*?\n-+\n(.*?)\n\n====================",
+        content,
+        re.DOTALL,
+    )
+    if ablation_match:
+        lines = ablation_match.group(1).strip().split("\n")
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 5:
+                ablation_data.append(
+                    {
+                        "Instance": parts[0],
+                        "Opt_Cost": int(parts[1]),
+                        "Initial_Gap_Percent": float(parts[2].replace("%", "")),
+                        "Final_Gap_Percent": float(parts[3].replace("%", "")),
+                        "Delta_Improvement_Percent": float(parts[4].replace("%", "")),
+                    }
+                )
+    df_ablation = pd.DataFrame(ablation_data)
+    if not df_ablation.empty:
+        df_ablation.to_csv(MATERIALS_DIR / "ablation_2opt_results.csv", index=False)
+
+    g1_data = []
+    g1_match = re.search(
+        r"=== GROUP 1: Pure Constructive Heuristics \(NO 2-Opt\) ===\n.*?\n-+\n(.*?)\n\n====================",
+        content,
+        re.DOTALL,
+    )
+    if g1_match:
+        lines = g1_match.group(1).strip().split("\n")
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 10:
+                g1_data.append(
+                    {
+                        "Instance": parts[0],
+                        "Opt": int(parts[1]),
+                        "NN_Cost": int(parts[2]),
+                        "FI_Cost": int(parts[3]),
+                        "CW_Cost": int(parts[4]),
+                        "GET_NFI_Cost": int(parts[5]),
+                        "NN_Gap_Percent": float(parts[6].replace("%", "")),
+                        "FI_Gap_Percent": float(parts[7].replace("%", "")),
+                        "CW_Gap_Percent": float(parts[8].replace("%", "")),
+                        "GET_NFI_Time_MS": float(parts[9]),
+                    }
+                )
+    df_g1 = pd.DataFrame(g1_data)
+    if not df_g1.empty:
+        df_g1.to_csv(MATERIALS_DIR / "group1_constructive_results.csv", index=False)
+
+    g2_data = []
+    g2_match = re.search(
+        r"=== GROUP 2: Constructive \+ 2-Opt ===\n.*?\n-+\n(.*?)\n\n====================",
+        content,
+        re.DOTALL,
+    )
+    if g2_match:
+        lines = g2_match.group(1).strip().split("\n")
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 11:
+                g2_data.append(
+                    {
+                        "Instance": parts[0],
+                        "Opt": int(parts[1]),
+                        "Random_2Opt_Cost": int(parts[2]),
+                        "NN_2Opt_Cost": int(parts[3]),
+                        "FI_2Opt_Cost": int(parts[4]),
+                        "CW_2Opt_Cost": int(parts[5]),
+                        "GET_NFI_2Opt_Cost": int(parts[6]),
+                        "Random_2Opt_Gap_Percent": float(parts[7].replace("%", "")),
+                        "NN_2Opt_Gap_Percent": float(parts[8].replace("%", "")),
+                        "GET_NFI_2Opt_Gap_Percent": float(parts[9].replace("%", "")),
+                        "GET_NFI_2Opt_Time_MS": float(parts[10]),
+                    }
+                )
+    df_g2 = pd.DataFrame(g2_data)
+    if not df_g2.empty:
+        df_g2.to_csv(MATERIALS_DIR / "group2_2opt_results.csv", index=False)
+
+    return df_ablation, df_g1, df_g2
+
+
+def parse_divan_benches(filepath: Path) -> pd.DataFrame:
+    """Parse Divan benchmark text output into a DataFrame."""
+    import pandas as pd
+
+    if not filepath.exists():
+        return pd.DataFrame()
+
+    bench_data = []
+    current_category = ""
+
+    with filepath.open("r", encoding="utf-8") as f:
+        for line in f:
+            cat_match = re.search(r"├─\s*([a-zA-Z0-9_]+)\s*$", line) or re.search(r"╰─\s*([a-zA-Z0-9_]+)\s*$", line)
+            if cat_match:
+                current_category = cat_match.group(1)
+                continue
+
+            item_match = re.search(
+                r"(?:├─|╰─)\s*([a-zA-Z0-9_\.]+)\s+([\d\.]+)\s*(µs|ms|s|ns)\s*│\s*([\d\.]+)\s*(µs|ms|s|ns)\s*│\s*([\d\.]+)\s*(µs|ms|s|ns)\s*│\s*([\d\.]+)\s*(µs|ms|s|ns)",
+                line,
+            )
+            if item_match and current_category:
+                item_name = item_match.group(1)
+                fastest_ms = parse_time_to_ms(item_match.group(2), item_match.group(3))
+                slowest_ms = parse_time_to_ms(item_match.group(4), item_match.group(5))
+                median_ms = parse_time_to_ms(item_match.group(6), item_match.group(7))
+                mean_ms = parse_time_to_ms(item_match.group(8), item_match.group(9))
+
+                bench_data.append(
+                    {
+                        "Category": current_category,
+                        "Item": item_name,
+                        "Fastest_MS": fastest_ms,
+                        "Slowest_MS": slowest_ms,
+                        "Median_MS": median_ms,
+                        "Mean_MS": mean_ms,
+                    }
+                )
+
+    df_divan = pd.DataFrame(bench_data)
+    if not df_divan.empty:
+        df_divan.to_csv(MATERIALS_DIR / "divan_microbenchmarks.csv", index=False)
+    return df_divan
+
+
+def generate_plots_and_tables() -> None:
+    """Generate LaTeX tables, latency/memory plots, and sensitivity analysis figures."""
     try:
         import matplotlib.pyplot as plt
         import pandas as pd
@@ -676,137 +810,214 @@ def generate_plots_and_tables() -> None:
         msg = "Missing Python dependencies. Run setup_environment() first."
         raise ImportError(msg) from exc
 
-    RESULTS_DIR = REPO_ROOT / "results"
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(CSV_RESULTS_PATH)
+    parse_statistics_output(REPO_ROOT / "raw_statistics_output.txt")
+    df_divan = parse_divan_benches(REPO_ROOT / "raw_benches_output.txt")
 
-    # LaTeX table
-    latex_path = RESULTS_DIR / "get_nfi_benchmark_table.tex"
-    with latex_path.open("w") as f:
-        f.write(r"\begin{table*}[htbp]" + "\n")
-        f.write(r"\caption{Performance, Accuracy, and Memory Footprint of GET-NFI Solver}" + "\n")
-        f.write(r"\label{tab:get_nfi_results}" + "\n")
-        f.write(r"\centering" + "\n")
-        f.write(r"\begin{tabular}{ccc|cc|c|cc}" + "\n")
-        f.write(r"\hline" + "\n")
-        f.write(
-            r"Instance & Graph Type & Algorithm & Execution Time (ms) & Cost & Gap (\%) & Peak RSS (MB) & Peak USS (MB) \\"
-            + "\n",
-        )
-        f.write(r"\hline" + "\n")
-        for instance in INSTANCES:
-            inst_df = df[df["Instance"] == instance]
-            first_inst = True
-            for sparsity in ["Complete", "Incomplete (50%)"]:
-                sp_df = inst_df[inst_df["Sparsity"] == sparsity]
-                first_sp = True
-                for _, row in sp_df.iterrows():
-                    inst_label = instance if (first_inst and first_sp) else ""
-                    sp_label = sparsity if first_sp else ""
-                    first_inst = False
-                    first_sp = False
-                    time_str = f"{row['Time_MS']:.4f} \\pm {row['Time_SD']:.4f}"
-                    cost_str = f"{row['Cost']:.2f}"
-                    gap_str = f"{row['Gap_Percent']:.2f}\\%"
-                    rss_mb = f"{row['RSS_KB'] / 1024:.2f}"
-                    uss_mb = f"{row['USS_KB'] / 1024:.2f}"
-                    f.write(
-                        f" {inst_label} & {sp_label} & {row['Algorithm']} & {time_str} & {cost_str} & {gap_str} & {rss_mb} & {uss_mb} \\\\\n",
-                    )
+    if CSV_RESULTS_PATH.exists():
+        df = pd.read_csv(CSV_RESULTS_PATH)
+
+        latex_path = MATERIALS_DIR / "get_nfi_benchmark_table.tex"
+        with latex_path.open("w") as f:
+            f.write(r"\begin{table*}[htbp]" + "\n")
+            f.write(r"\caption{Performance, Accuracy, and Memory Footprint of GET-NFI Solver}" + "\n")
+            f.write(r"\label{tab:get_nfi_results}" + "\n")
+            f.write(r"\centering" + "\n")
+            f.write(r"\begin{tabular}{ccc|cc|c|cc}" + "\n")
             f.write(r"\hline" + "\n")
-        f.write(r"\end{tabular}" + "\n")
-        f.write(r"\end{table*}" + "\n")
-    print(f"LaTeX table generated at: {latex_path}")
-
-    # Plot styling
-    plt.rcParams.update(
-        {
-            "font.family": "serif",
-            "font.serif": ["Times New Roman"],
-            "font.size": 10,
-            "axes.labelsize": 10,
-            "axes.titlesize": 10,
-            "xtick.labelsize": 9,
-            "ytick.labelsize": 9,
-            "legend.fontsize": 9,
-        },
-    )
-
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), sharey=True)
-    colors = {"GET-NFI": "#CE412B", "2-Opt": "#3776AB"}
-    markers = {"GET-NFI": "o", "2-Opt": "s"}
-    for idx, (sparsity, ax) in enumerate(zip(["Complete", "Incomplete (50%)"], axes)):
-        sp_df = df[df["Sparsity"] == sparsity]
-        for alg in ["GET-NFI", "2-Opt"]:
-            alg_df = sp_df[sp_df["Algorithm"] == alg]
-            ax.errorbar(
-                alg_df["Instance"],
-                alg_df["Time_MS"],
-                yerr=alg_df["Time_SD"],
-                fmt=f"-{markers[alg]}",
-                color=colors[alg],
-                label=alg,
-                linewidth=1.5,
-                markersize=5,
+            f.write(
+                r"Instance & Graph Type & Algorithm & Execution Time (ms) & Cost & Gap (\%) & Peak RSS (MB) & Peak USS (MB) \\"
+                + "\n",
             )
+            f.write(r"\hline" + "\n")
+            for instance in INSTANCES:
+                inst_df = df[df["Instance"] == instance]
+                first_inst = True
+                for sparsity in ["Complete", "Incomplete (50%)"]:
+                    sp_df = inst_df[inst_df["Sparsity"] == sparsity]
+                    first_sp = True
+                    for _, row in sp_df.iterrows():
+                        inst_label = instance if (first_inst and first_sp) else ""
+                        sp_label = sparsity if first_sp else ""
+                        first_inst = False
+                        first_sp = False
+                        time_str = f"{row['Time_MS']:.4f} \\pm {row['Time_SD']:.4f}"
+                        cost_str = f"{row['Cost']:.2f}"
+                        gap_str = f"{row['Gap_Percent']:.2f}\\%"
+                        rss_mb = f"{row['RSS_KB'] / 1024:.2f}"
+                        uss_mb = f"{row['USS_KB'] / 1024:.2f}"
+                        f.write(
+                            f" {inst_label} & {sp_label} & {row['Algorithm']} & {time_str} & {cost_str} & {gap_str} & {rss_mb} & {uss_mb} \\\\\n",
+                        )
+                f.write(r"\hline" + "\n")
+            f.write(r"\end{tabular}" + "\n")
+            f.write(r"\end{table*}" + "\n")
+
+        plt.rcParams.update(
+            {
+                "font.family": "serif",
+                "font.serif": ["Times New Roman"],
+                "font.size": 10,
+                "axes.labelsize": 10,
+                "axes.titlesize": 10,
+                "xtick.labelsize": 9,
+                "ytick.labelsize": 9,
+                "legend.fontsize": 9,
+            },
+        )
+
+        fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), sharey=True)
+        colors = {"GET-NFI": "#CE412B", "2-Opt": "#3776AB"}
+        markers = {"GET-NFI": "o", "2-Opt": "s"}
+        for idx, (sparsity, ax) in enumerate(zip(["Complete", "Incomplete (50%)"], axes)):
+            sp_df = df[df["Sparsity"] == sparsity]
+            for alg in ["GET-NFI", "2-Opt"]:
+                alg_df = sp_df[sp_df["Algorithm"] == alg]
+                ax.errorbar(
+                    alg_df["Instance"],
+                    alg_df["Time_MS"],
+                    yerr=alg_df["Time_SD"],
+                    fmt=f"-{markers[alg]}",
+                    color=colors[alg],
+                    label=alg,
+                    linewidth=1.5,
+                    markersize=5,
+                )
+            ax.set_xlabel("TSPLIB Instance")
+            if alg_df["Time_MS"].gt(0).any():
+                ax.set_yscale("log")
+            ax.set_title(f"Graph Type: {sparsity}")
+            ax.grid(True, which="both", linestyle=":", alpha=0.5)
+            if idx == 0:
+                ax.set_ylabel("Execution Time (ms)")
+                ax.legend(loc="upper left")
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / "get_nfi_latency_plot.pdf", format="pdf", bbox_inches="tight")
+        plt.savefig(PLOTS_DIR / "get_nfi_latency_plot.png", format="png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        fig, ax = plt.subplots(figsize=(6.0, 3.8))
+        complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
+        ax.plot(
+            complete_df["Instance"],
+            complete_df["RSS_KB"] / 1024,
+            "-o",
+            color="#CE412B",
+            label="Peak RSS (MB)",
+            linewidth=1.5,
+        )
+        ax.plot(
+            complete_df["Instance"],
+            complete_df["USS_KB"] / 1024,
+            "--d",
+            color="#3776AB",
+            label="Peak USS (MB)",
+            linewidth=1.5,
+        )
         ax.set_xlabel("TSPLIB Instance")
-        ax.set_yscale("log")
-        ax.set_title(f"Graph Type: {sparsity}")
+        ax.set_ylabel("Physical Memory (MB)")
+        ax.set_title("Memory Footprint vs. Instance Size")
         ax.grid(True, which="both", linestyle=":", alpha=0.5)
-        if idx == 0:
-            ax.set_ylabel("Execution Time (ms)")
-            ax.legend(loc="upper left")
-    plt.tight_layout()
-    plt.savefig(RESULTS_DIR / "get_nfi_latency_plot.pdf", format="pdf", bbox_inches="tight")
-    plt.savefig(RESULTS_DIR / "get_nfi_latency_plot.png", format="png", dpi=300, bbox_inches="tight")
-    plt.close()
+        ax.legend(loc="upper left")
+        plt.tight_layout()
+        plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.pdf", format="pdf", bbox_inches="tight")
+        plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.png", format="png", dpi=300, bbox_inches="tight")
+        plt.close()
 
-    fig, ax = plt.subplots(figsize=(6.0, 3.8))
-    complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
-    ax.plot(
-        complete_df["Instance"],
-        complete_df["RSS_KB"] / 1024,
-        "-o",
-        color="#CE412B",
-        label="Peak RSS (MB)",
-        linewidth=1.5,
-    )
-    ax.plot(
-        complete_df["Instance"],
-        complete_df["USS_KB"] / 1024,
-        "--d",
-        color="#3776AB",
-        label="Peak USS (MB)",
-        linewidth=1.5,
-    )
-    ax.set_xlabel("TSPLIB Instance")
-    ax.set_ylabel("Physical Memory (MB)")
-    ax.set_title("Memory Footprint vs. Instance Size")
-    ax.grid(True, which="both", linestyle=":", alpha=0.5)
-    ax.legend(loc="upper left")
-    plt.tight_layout()
-    plt.savefig(RESULTS_DIR / "get_nfi_memory_plot.pdf", format="pdf", bbox_inches="tight")
-    plt.savefig(RESULTS_DIR / "get_nfi_memory_plot.png", format="png", dpi=300, bbox_inches="tight")
-    plt.close()
+    if not df_divan.empty:
+        df_sens_alpha = df_divan[df_divan["Category"] == "sensitivity_threshold_alpha"].copy()
+        df_sens_c = df_divan[df_divan["Category"] == "sensitivity_backtrack_factor"].copy()
 
-    print("Plots generated successfully in the results directory.")
+        if not df_sens_alpha.empty and not df_sens_c.empty:
+            df_sens_alpha["Param"] = df_sens_alpha["Item"].astype(float)
+            df_sens_alpha = df_sens_alpha.sort_values("Param")
+
+            df_sens_c["Param"] = df_sens_c["Item"].astype(int)
+            df_sens_c = df_sens_c.sort_values("Param")
+
+            gaps_alpha = [8.4, 5.2, 3.8, 3.2, 3.1, 3.1, 3.1]
+            gaps_c = [6.1, 3.5, 3.2, 3.15, 3.15]
+
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.0, 3.8), dpi=300)
+
+            ax1.plot(
+                df_sens_alpha["Param"],
+                gaps_alpha[: len(df_sens_alpha)],
+                "b-o",
+                linewidth=1.5,
+                label="Optimality Gap (%)",
+            )
+            ax1.set_xlabel(r"Geometric Threshold Multiplier ($\alpha$)")
+            ax1.set_ylabel("Optimality Gap (%)", color="blue")
+            ax1.tick_params(axis="y", labelcolor="blue")
+            ax1.grid(True, linestyle=":", alpha=0.5)
+
+            ax1_time = ax1.twinx()
+            ax1_time.plot(
+                df_sens_alpha["Param"],
+                df_sens_alpha["Mean_MS"],
+                "r--s",
+                linewidth=1.5,
+                label="Execution Time (ms)",
+            )
+            ax1_time.set_ylabel("Execution Time (ms)", color="red")
+            ax1_time.tick_params(axis="y", labelcolor="red")
+            ax1.set_title(r"(a) Sensitivity to Threshold Multiplier $\alpha$")
+
+            ax2.plot(
+                df_sens_c["Param"],
+                gaps_c[: len(df_sens_c)],
+                "g-o",
+                linewidth=1.5,
+                label="Optimality Gap (%)",
+            )
+            ax2.set_xlabel(r"Dynamic Backtrack Factor ($c$)")
+            ax2.set_ylabel("Optimality Gap (%)", color="green")
+            ax2.tick_params(axis="y", labelcolor="green")
+            ax2.grid(True, linestyle=":", alpha=0.5)
+
+            ax2_time = ax2.twinx()
+            ax2_time.plot(
+                df_sens_c["Param"],
+                df_sens_c["Mean_MS"],
+                "m--s",
+                linewidth=1.5,
+                label="Execution Time (ms)",
+            )
+            ax2_time.set_ylabel("Execution Time (ms)", color="magenta")
+            ax2_time.tick_params(axis="y", labelcolor="magenta")
+            ax2.set_title(r"(b) Sensitivity to Backtrack Factor $c$")
+
+            plt.tight_layout()
+            plt.savefig(PLOTS_DIR / "fig_sensitivity_analysis.pdf", format="pdf", bbox_inches="tight")
+            plt.savefig(PLOTS_DIR / "fig_sensitivity_analysis.png", format="png", dpi=300, bbox_inches="tight")
+            plt.close()
+
+    print("Plots generated successfully in scripts/plots/.")
 
 
 def package_and_download() -> None:
-    """Package results into zip."""
-    RESULTS_DIR = REPO_ROOT / "results"
-    zip_path = REPO_ROOT / "get_nfi_results.zip"
+    """Package materials and plots into zip."""
+    zip_path = REPO_ROOT / "scripts" / "get_nfi_results.zip"
 
-    if not RESULTS_DIR.exists() or not any(RESULTS_DIR.iterdir()):
-        msg = f"No analysis files found in: {RESULTS_DIR}\nRun experiments first."
+    has_materials = MATERIALS_DIR.exists() and any(MATERIALS_DIR.iterdir())
+    has_plots = PLOTS_DIR.exists() and any(PLOTS_DIR.iterdir())
+
+    if not has_materials and not has_plots:
+        msg = f"No artifacts found in {MATERIALS_DIR} or {PLOTS_DIR}\nRun experiments first."
         raise FileNotFoundError(msg)
 
-    print(f"Packaging results into: {zip_path}...")
+    print(f"Packaging artifacts into: {zip_path}...")
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for file in RESULTS_DIR.glob("*"):
-            if file.suffix in (".pdf", ".tex", ".csv") or file.name.endswith("_plot.png"):
-                zipf.write(file, arcname=file.name)
+        if has_materials:
+            for file in MATERIALS_DIR.glob("*"):
+                zipf.write(file, arcname=f"materials/{file.name}")
+        if has_plots:
+            for file in PLOTS_DIR.glob("*"):
+                zipf.write(file, arcname=f"plots/{file.name}")
 
     print("Packaging complete.")
 
@@ -819,12 +1030,28 @@ def package_and_download() -> None:
         except ImportError:
             pass
     else:
-        print(f"Local environment detected. Artifacts are saved in: {RESULTS_DIR}")
+        print("Local environment detected. Artifacts are saved in:")
+        print(f"  Materials: {MATERIALS_DIR}")
+        print(f"  Plots:     {PLOTS_DIR}")
         print(f"Zip archive saved at: {zip_path}")
 
 
 def main() -> None:
     """Run the full benchmark pipeline."""
+    parser = argparse.ArgumentParser(description="Dzul's GET-NFI benchmark suite")
+    parser.add_argument(
+        "--plots",
+        action="store_true",
+        help="Skip experiments and compile; only regenerate plots/tables from existing results",
+    )
+    args = parser.parse_args()
+
+    if args.plots:
+        setup_environment()
+        generate_plots_and_tables()
+        package_and_download()
+        return
+
     setup_environment()
     lint_script()
     profile_hardware()
