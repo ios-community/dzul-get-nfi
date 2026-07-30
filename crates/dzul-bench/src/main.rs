@@ -11,6 +11,7 @@ use dzul_bench::{build_complete_graph, build_incomplete_graph, get_dataset};
 use dzul_core::{Graph, TspConfig, Weight, Workspace, ZeroHeuristic, solve};
 use std::time::Instant;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let mut instance_name = "eil51";

@@ -826,7 +826,9 @@ def run_advanced_analyses() -> None:
 
         opt_cost = INSTANCES["eil51"]
         gap = float("nan") if tour_type == "Disconnected" else ((cost - opt_cost) / opt_cost) * 100.0
-        sparsity_results.append({"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type})
+        sparsity_results.append(
+            {"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type}
+        )
     df_sparsity = pd.DataFrame(sparsity_results)
     df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
@@ -1419,8 +1421,10 @@ def generate_plots_and_tables() -> None:
             gaps_alpha = []
             for _, row in df_sens_alpha.iterrows():
                 _, cost, _ = _run_solver_for_param(
-                    "--threshold-multiplier", row["Param"],
-                    instance="eil51", enable_2opt=False,
+                    "--threshold-multiplier",
+                    row["Param"],
+                    instance="eil51",
+                    enable_2opt=False,
                 )
                 if cost <= 0.0 or math.isnan(cost):
                     gaps_alpha.append(float("nan"))
@@ -1430,8 +1434,10 @@ def generate_plots_and_tables() -> None:
             gaps_c = []
             for _, row in df_sens_c.iterrows():
                 _, cost, _ = _run_solver_for_param(
-                    "--backtrack-factor", row["Param"],
-                    instance="eil51", enable_2opt=False,
+                    "--backtrack-factor",
+                    row["Param"],
+                    instance="eil51",
+                    enable_2opt=False,
                 )
                 if cost <= 0.0 or math.isnan(cost):
                     gaps_c.append(float("nan"))
