@@ -243,7 +243,7 @@ fn wilcoxon_signed_rank(a: &[f64], b: &[f64]) -> (f64, f64) {
     let mu = w_sum / 2.0;
     let sigma = libm::sqrt(w_sum * (w_sum + 1.0) / 12.0);
     let z = if sigma > 0.0 { (w - mu) / sigma } else { 0.0 };
-    let p_value = 2.0 * normal_cdf(z.abs());
+    let p_value = 2.0 * (1.0 - normal_cdf(z.abs()));
     (w, p_value)
 }
 
@@ -296,10 +296,10 @@ fn test_group1_pure_constructive() {
 
     println!("\n=== GROUP 1: Pure Constructive Heuristics (NO 2-Opt) ===");
     println!(
-        "{:<14}{:>10}{:>10}{:>10}{:>10}{:>10}{:>9}{:>9}{:>9}{:>10}",
+        "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>10}{:>10}{:>10}{:>12}",
         "Instance", "Opt", "NN", "FI", "CW", "GET-NFI", "NN%", "FI%", "CW%", "NFI(ms)"
     );
-    println!("{}", "-".repeat(104));
+    println!("{}", "-".repeat(131));
 
     for name in ALL_INSTANCES {
         let Some(coords) = get_dataset(name) else {
@@ -333,7 +333,7 @@ fn test_group1_pure_constructive() {
         let nfi_gap = gap_pct(nfi_int, opt);
 
         println!(
-            "{:<14}{:>10}{:>10}{:>10}{:>10}{:>10}{:>8.2}%{:>8.2}%{:>8.2}%{:>10}",
+            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12}",
             name, opt, nn_int, fi_int, cw_int, nfi_int, nn_gap, fi_gap, cw_gap, nfi_elapsed_ms
         );
 
@@ -400,7 +400,7 @@ fn test_group2_with_2opt() {
 
     println!("\n=== GROUP 2: Constructive + 2-Opt ===");
     println!(
-        "{:<14}{:>10}{:>10}{:>10}{:>10}{:>10}{:>10}{:>9}{:>9}{:>9}{:>10}",
+        "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>15}{:>10}{:>10}{:>10}{:>12}",
         "Instance",
         "Opt",
         "R+2O",
@@ -413,7 +413,7 @@ fn test_group2_with_2opt() {
         "NFI%",
         "NFI(ms)"
     );
-    println!("{}", "-".repeat(124));
+    println!("{}", "-".repeat(146));
 
     for name in ALL_INSTANCES {
         let Some(coords) = get_dataset(name) else {
@@ -461,7 +461,7 @@ fn test_group2_with_2opt() {
         let nfi_gap = gap_pct(nfi_int, opt);
 
         println!(
-            "{:<14}{:>10}{:>10}{:>10}{:>10}{:>10}{:>10}{:>8.2}%{:>8.2}%{:>8.2}%{:>10}",
+            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12}",
             name,
             opt,
             r_int,

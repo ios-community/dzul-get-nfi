@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import platform
 import re
@@ -734,12 +735,13 @@ def run_main_experiments() -> None:
                     elapsed_ms = statistics.mean(times)
                     time_sd = statistics.stdev(times) if len(times) > 1 else 0.0
                 else:
-                    elapsed_ms = 0.0
-                    time_sd = 0.0
+                    elapsed_ms = float("nan")
+                    time_sd = float("nan")
 
                 if tour_type == "N/A":
                     cost = float("nan")
                     gap = float("nan")
+                    tour_type = "Disconnected"
                 else:
                     gap = ((cost - opt_cost) / opt_cost) * 100.0
 
@@ -793,13 +795,14 @@ def run_advanced_analyses() -> None:
     # --- Sparsity Phase Transition ---
     print("\nRunning Sparsity Phase Transition Analysis...")
     sparsity_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    sparsity_results: list[dict[str, float]] = []
+    sparsity_results: list[dict[str, float | str]] = []
     for sparsity in sparsity_levels:
         print(f"  Testing Sparsity Level: {sparsity * 100:.0f}%")
 
         cost = float("nan")
-        elapsed_ms = 0.0
+        elapsed_ms: float = float("nan")
         tour_type = "N/A"
+        solver_ok = False
         if bin_exists:
             cmd = [
                 str(RUST_BIN_PATH),
@@ -814,10 +817,16 @@ def run_advanced_analyses() -> None:
             ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
             if ret.returncode == 0:
                 elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
+                solver_ok = True
+
+        if not solver_ok or cost is None or cost <= 0.0:
+            tour_type = "Disconnected"
+            elapsed_ms = float("nan")
+            cost = float("nan")
 
         opt_cost = INSTANCES["eil51"]
-        gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
-        sparsity_results.append({"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap})
+        gap = float("nan") if tour_type == "Disconnected" else ((cost - opt_cost) / opt_cost) * 100.0
+        sparsity_results.append({"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type})
     df_sparsity = pd.DataFrame(sparsity_results)
     df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
@@ -846,7 +855,7 @@ def run_advanced_analyses() -> None:
     pareto_results: list[dict[str, float]] = []
     for limit in backtrack_limits:
         cost = float("nan")
-        elapsed_ms = 0.0
+        elapsed_ms = float("nan")
         tour_type = "N/A"
         if bin_exists:
             cmd = [
@@ -901,8 +910,9 @@ def run_advanced_analyses() -> None:
     atsp_results: list[dict[str, object]] = []
     for instance, opt_cost in ATSP_INSTANCES.items():
         cost = float("nan")
-        elapsed_ms = 0.0
+        elapsed_ms = float("nan")
         gap = float("nan")
+        tour_type = "N/A"
         if bin_exists:
             cmd = [
                 str(RUST_BIN_PATH),
@@ -917,8 +927,15 @@ def run_advanced_analyses() -> None:
             ]
             ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
             if ret.returncode == 0:
-                elapsed_ms, cost, _ = parse_benchmark_output(ret.stdout)
-                gap = ((cost - opt_cost) / opt_cost) * 100.0
+                elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
+
+        if tour_type == "N/A" or math.isnan(cost) or cost <= 0.0:
+            tour_type = "N/A"
+            elapsed_ms = float("nan")
+            cost = float("nan")
+            gap = float("nan")
+        else:
+            gap = ((cost - opt_cost) / opt_cost) * 100.0
 
         atsp_results.append(
             {
@@ -1397,15 +1414,29 @@ def generate_plots_and_tables() -> None:
             df_sens_c["Param"] = df_sens_c["Item"].astype(int)
             df_sens_c = df_sens_c.sort_values("Param")
 
-            # Compute gaps dynamically from parsed statistics output
-            if not df_g1.empty and "GET_NFI_Gap_Percent" in df_g1.columns:
-                gaps_alpha = [float(df_g1["GET_NFI_Gap_Percent"].mean())] * len(df_sens_alpha)
-            else:
-                gaps_alpha = [float("nan")] * len(df_sens_alpha)
-            if not df_g2.empty and "GET_NFI_2Opt_Gap_Percent" in df_g2.columns:
-                gaps_c = [float(df_g2["GET_NFI_2Opt_Gap_Percent"].mean())] * len(df_sens_c)
-            else:
-                gaps_c = [float("nan")] * len(df_sens_c)
+            # Compute gaps dynamically by running the solver for each param value
+            opt_eil51 = INSTANCES["eil51"]
+            gaps_alpha = []
+            for _, row in df_sens_alpha.iterrows():
+                _, cost, _ = _run_solver_for_param(
+                    "--threshold-multiplier", row["Param"],
+                    instance="eil51", enable_2opt=False,
+                )
+                if cost <= 0.0 or math.isnan(cost):
+                    gaps_alpha.append(float("nan"))
+                else:
+                    gaps_alpha.append(((cost - opt_eil51) / opt_eil51) * 100.0)
+
+            gaps_c = []
+            for _, row in df_sens_c.iterrows():
+                _, cost, _ = _run_solver_for_param(
+                    "--backtrack-factor", row["Param"],
+                    instance="eil51", enable_2opt=False,
+                )
+                if cost <= 0.0 or math.isnan(cost):
+                    gaps_c.append(float("nan"))
+                else:
+                    gaps_c.append(((cost - opt_eil51) / opt_eil51) * 100.0)
 
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.0, 3.8), dpi=300)
 
@@ -1463,6 +1494,61 @@ def generate_plots_and_tables() -> None:
             plt.close()
 
     print("Plots generated successfully in scripts/plots/.")
+
+
+def _run_solver_for_param(  # noqa: PLR0913
+    param_name: str,
+    param_value: float,
+    instance: str = "eil51",
+    sparsity: float = 1.0,
+    *,
+    enable_2opt: bool = False,
+    backtracks: int = 5000,
+    is_directed: bool = False,
+) -> tuple[float, float, str]:
+    """Run the solver binary with a custom parameter and return (elapsed_ms, cost, tour_type).
+
+    Args:
+        param_name: The CLI flag name (e.g., ``--threshold-multiplier``).
+        param_value: The parameter value to pass.
+        instance: TSPLIB instance name.
+        sparsity: Edge retention ratio (1.0 = complete graph).
+        enable_2opt: Whether to enable 2-Opt local search.
+        backtracks: Maximum backtrack limit.
+        is_directed: Whether the graph is directed (ATSP).
+
+    Returns:
+        A tuple of ``(elapsed_ms, cost, tour_type)``, or
+        ``(float("nan"), float("nan"), "N/A")`` on failure.
+
+    """
+    if not RUST_BIN_PATH.exists():
+        return float("nan"), float("nan"), "N/A"
+
+    cmd = [
+        str(RUST_BIN_PATH),
+        "--instance",
+        instance,
+        "--sparsity",
+        str(sparsity),
+        "--backtracks",
+        str(backtracks),
+    ]
+    if enable_2opt:
+        cmd.append("--2opt")
+    if is_directed:
+        cmd.append("--directed")
+    cmd.append(param_name)
+    cmd.append(str(param_value))
+
+    ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
+    if ret.returncode != 0:
+        return float("nan"), float("nan"), "Disconnected"
+
+    elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
+    if cost <= 0.0:
+        return float("nan"), float("nan"), "Disconnected"
+    return elapsed_ms, cost, tour_type
 
 
 def package_and_download() -> None:

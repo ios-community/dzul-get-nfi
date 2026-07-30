@@ -18,6 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut enable_2opt = false;
     let mut max_backtracks = 5000;
     let mut is_directed = false;
+    let mut threshold_multiplier: f64 = 1.0;
+    let mut has_custom_multiplier = false;
+    let mut backtrack_factor: usize = 10;
+    let mut has_custom_factor = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -41,6 +45,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--directed" => {
                 is_directed = true;
                 i += 1;
+            }
+            "--threshold-multiplier" => {
+                threshold_multiplier = args[i + 1].parse()?;
+                has_custom_multiplier = true;
+                i += 2;
+            }
+            "--backtrack-factor" => {
+                backtrack_factor = args[i + 1].parse()?;
+                has_custom_factor = true;
+                i += 2;
             }
             _ => i += 1,
         }
@@ -91,10 +105,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = TspConfig {
         start_node: 0,
-        max_backtracks: Some(max_backtracks),
+        max_backtracks: if has_custom_factor {
+            None
+        } else {
+            Some(max_backtracks)
+        },
         enable_2opt,
-        threshold_multiplier: None,
-        backtrack_factor: 10,
+        threshold_multiplier: if has_custom_multiplier {
+            Some(threshold_multiplier)
+        } else {
+            None
+        },
+        backtrack_factor: if has_custom_factor {
+            backtrack_factor
+        } else {
+            10
+        },
         candidate_set_size: 15,
     };
 
