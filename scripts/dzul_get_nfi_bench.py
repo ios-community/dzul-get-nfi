@@ -761,6 +761,8 @@ def run_main_experiments() -> None:
                 )
 
     df = pd.DataFrame(results)
+    if not bin_exists:
+        raise RuntimeError("Genuine process memory profiling requires compiling the Rust binary first (cargo build --release).")
     df.to_csv(CSV_RESULTS_PATH, index=False)
     print("Main experiment matrix complete. Results saved.")
 
@@ -1632,7 +1634,11 @@ def main() -> None:
     run_bench_suite()
 
     # Additional experiments that require the standalone binary
-    compile_rust_binary()
+    if shutil.which("cargo"):
+        compile_rust_binary()
+    else:
+        print("Cargo not found; skipping binary compilation.")
+    run_main_experiments()
     run_advanced_analyses()
 
     # Generate all outputs
