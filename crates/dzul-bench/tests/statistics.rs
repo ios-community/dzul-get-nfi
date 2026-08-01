@@ -333,7 +333,7 @@ fn test_group1_pure_constructive() {
         let nfi_gap = gap_pct(nfi_int, opt);
 
         println!(
-            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12.2f}",
+            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12.2}",
             name, opt, nn_int, fi_int, cw_int, nfi_int, nn_gap, fi_gap, cw_gap, nfi_elapsed_ms
         );
 
