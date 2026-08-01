@@ -23,6 +23,10 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+
+class MemoryProfilingError(RuntimeError):
+    """Raised when binary missing and memory profiling required."""
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -762,7 +766,7 @@ def run_main_experiments() -> None:
 
     df = pd.DataFrame(results)
     if not bin_exists:
-        raise RuntimeError("Genuine process memory profiling requires compiling the Rust binary first (cargo build --release).")
+        raise MemoryProfilingError
     df.to_csv(CSV_RESULTS_PATH, index=False)
     print("Main experiment matrix complete. Results saved.")
 
