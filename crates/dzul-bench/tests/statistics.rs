@@ -317,7 +317,7 @@ fn test_group1_pure_constructive() {
         let (_cw_path, cw_cost) = run_cw(&nodes, &mut edges);
         let nfi_start = Instant::now();
         let nfi_result = solve_get_nfi(&nodes, &mut edges, n, false);
-        let nfi_elapsed_ms = nfi_start.elapsed().as_millis();
+        let nfi_elapsed_ms = nfi_start.elapsed().as_secs_f64() * 1000.0;
 
         let nfi_cost = nfi_result.as_ref().map(|c| c.1).unwrap_or(Weight(0));
         let _nfi_path: Vec<u32> = nfi_result.as_ref().map(|c| c.0.clone()).unwrap_or_default();
@@ -333,7 +333,7 @@ fn test_group1_pure_constructive() {
         let nfi_gap = gap_pct(nfi_int, opt);
 
         println!(
-            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12}",
+            "{:<14}{:>15}{:>15}{:>15}{:>15}{:>15}{:>9.2}%{:>9.2}%{:>9.2}%{:>12.2f}",
             name, opt, nn_int, fi_int, cw_int, nfi_int, nn_gap, fi_gap, cw_gap, nfi_elapsed_ms
         );
 
@@ -445,7 +445,7 @@ fn test_group2_with_2opt() {
         // GET-NFI + 2-Opt
         let nfi_start = Instant::now();
         let nfi_result = solve_get_nfi(&nodes, &mut edges, n, true);
-        let nfi_elapsed_ms = nfi_start.elapsed().as_millis();
+        let nfi_elapsed_ms = nfi_start.elapsed().as_secs_f64() * 1000.0;
         let nfi_cost = nfi_result.as_ref().map(|c| c.1).unwrap_or(Weight(0));
 
         let r_int = to_int(random_cost);
