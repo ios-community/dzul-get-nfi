@@ -37,6 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MATERIALS_DIR = REPO_ROOT / "scripts" / "materials"
 PLOTS_DIR = REPO_ROOT / "scripts" / "plots"
+PAPER_DIR = REPO_ROOT.parent / "paper"
 
 ext = ".exe" if sys.platform == "win32" else ""
 RUST_BIN_PATH = REPO_ROOT / f"dzul_get_nfi_bench{ext}"
@@ -1079,8 +1080,15 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
     """Parse Divan statistics text output into DataFrames for ablation and group results.
 
     Extracts the ablation study table and both constructive-heuristic groups
-    (Group 1: no 2-Opt; Group 2: with 2-Opt) from the raw Divan output and
-    saves each as a CSV under ``MATERIALS_DIR``.
+    (Group 1: no 2-Opt; Group 2: with 2-Opt) from the raw Divan output. Each
+    group is split into two publication-ready CSVs under ``MATERIALS_DIR``:
+
+    - Group 1: ``constructive_costs.csv`` (Instance, Opt, NN, FI, CW, GET-NFI)
+      and ``constructive_gaps.csv`` (Instance, NN (%), FI (%), CW (%),
+      Time (ms)).
+    - Group 2: ``twoopt_costs.csv`` (Instance, Opt, Random, NN, FI, CW,
+      GET-NFI) and ``twoopt_gaps.csv`` (Instance, Random (%), NN (%),
+      GET-NFI (%), Time (ms)).
 
     Args:
         filepath: Path to the raw Divan statistics output file.
@@ -1149,7 +1157,22 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 )
     df_g1 = pd.DataFrame(g1_data)
     if not df_g1.empty:
-        df_g1.to_csv(MATERIALS_DIR / "group1_constructive_results.csv", index=False)
+        df_g1[["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]].rename(
+            columns={
+                "NN_Cost": "NN",
+                "FI_Cost": "FI",
+                "CW_Cost": "CW",
+                "GET_NFI_Cost": "GET-NFI",
+            },
+        ).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
+        df_g1[["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]].rename(
+            columns={
+                "NN_Gap_Percent": "NN (%)",
+                "FI_Gap_Percent": "FI (%)",
+                "CW_Gap_Percent": "CW (%)",
+                "GET_NFI_Time_MS": "Time (ms)",
+            },
+        ).to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
 
     g2_data = []
     g2_match = re.search(
@@ -1179,7 +1202,33 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 )
     df_g2 = pd.DataFrame(g2_data)
     if not df_g2.empty:
-        df_g2.to_csv(MATERIALS_DIR / "group2_2opt_results.csv", index=False)
+        df_g2[
+            ["Instance", "Opt", "Random_2Opt_Cost", "NN_2Opt_Cost", "FI_2Opt_Cost", "CW_2Opt_Cost", "GET_NFI_2Opt_Cost"]
+        ].rename(
+            columns={
+                "Random_2Opt_Cost": "Random",
+                "NN_2Opt_Cost": "NN",
+                "FI_2Opt_Cost": "FI",
+                "CW_2Opt_Cost": "CW",
+                "GET_NFI_2Opt_Cost": "GET-NFI",
+            },
+        ).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
+        df_g2[
+            [
+                "Instance",
+                "Random_2Opt_Gap_Percent",
+                "NN_2Opt_Gap_Percent",
+                "GET_NFI_2Opt_Gap_Percent",
+                "GET_NFI_2Opt_Time_MS",
+            ]
+        ].rename(
+            columns={
+                "Random_2Opt_Gap_Percent": "Random (%)",
+                "NN_2Opt_Gap_Percent": "NN (%)",
+                "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)",
+                "GET_NFI_2Opt_Time_MS": "Time (ms)",
+            },
+        ).to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
 
     return df_ablation, df_g1, df_g2
 
@@ -1566,6 +1615,34 @@ def _run_solver_for_param(  # noqa: PLR0913
     return elapsed_ms, cost, tour_type
 
 
+def publish_to_paper() -> None:
+    """Copy exported materials and plots into the sibling ``paper/`` directory.
+
+    The paper (``paper/main.typ``) loads its tables and figures from
+    ``paper/materials/`` and ``paper/plots/``. This step mirrors the freshly
+    generated artifacts into those folders so the paper renders the latest
+    benchmark output. Files that are not re-exported (e.g.,
+    ``complexity_comparison.csv``) are left untouched. No-op when the sibling
+    ``paper/`` directory does not exist (e.g., cloud runs).
+
+    Raises:
+        OSError: If copying an artifact directory fails.
+
+    """
+    if not PAPER_DIR.exists():
+        print(f"Notice: sibling paper directory not found at {PAPER_DIR}; skipping publish step.")
+        return
+    for src, dst_name in [(MATERIALS_DIR, "materials"), (PLOTS_DIR, "plots")]:
+        if not src.exists():
+            continue
+        dst = PAPER_DIR / dst_name
+        dst.mkdir(parents=True, exist_ok=True)
+        for file in src.rglob("*"):
+            if file.is_file():
+                shutil.copy2(file, dst / file.relative_to(src))
+    print(f"Published benchmark artifacts to {PAPER_DIR}")
+
+
 def package_and_download() -> None:
     """Package generated materials and plots into a zip archive.
 
@@ -1613,7 +1690,8 @@ def main() -> None:
     4. ``cargo bench --bench solver_benches`` — Divan microbenchmarks
     5. Advanced analyses (sparsity, Pareto, ATSP) via standalone binary
     6. Parse outputs and generate CSVs, LaTeX tables, publication figures
-    7. Package all artifacts into a zip archive
+    7. Publish artifacts to the sibling ``paper/`` directory (if present)
+    8. Package all artifacts into a zip archive
 
     Use ``--plots`` to skip all experiments and only regenerate figures from
     previously saved results.
@@ -1629,6 +1707,7 @@ def main() -> None:
     if args.plots:
         setup_environment()
         generate_plots_and_tables()
+        publish_to_paper()
         package_and_download()
         return
 
@@ -1650,6 +1729,7 @@ def main() -> None:
 
     # Generate all outputs
     generate_plots_and_tables()
+    publish_to_paper()
     package_and_download()
 
 
