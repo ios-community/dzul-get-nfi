@@ -26,7 +26,7 @@ import zipfile
 class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
