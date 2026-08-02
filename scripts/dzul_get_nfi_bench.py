@@ -9,7 +9,7 @@ This script uses ``uv`` for dependency management and ``ruff`` for linting.
 # ruff: noqa: I001
 
 from __future__ import annotations
-  # ruff: noqa: I001
+
 
 import argparse
 import json
