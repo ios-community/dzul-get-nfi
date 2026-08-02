@@ -839,21 +839,25 @@ def run_advanced_analyses() -> None:
         sparsity_results.append(
             {"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type}
         )
-    df_sparsity = pd.DataFrame(sparsity_results)
+    df_sparsity = pd.DataFrame(sparsity_results).rename(
+        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
+    )
+    for col in ("Time (ms)", "Gap (%)"):
+        df_sparsity[col] = df_sparsity[col].map(_format_2dp)
     df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
     fig, ax1 = plt.subplots(figsize=(6.0, 3.8))
     color = "tab:red"
     ax1.set_xlabel("Sparsity Level (Ratio of Kept Edges)")
     ax1.set_ylabel("Execution Time (ms)", color=color)
-    ax1.plot(df_sparsity["Sparsity"], df_sparsity["Time_MS"], "o-", color=color, linewidth=1.5)
+    ax1.plot(df_sparsity["Sparsity"], df_sparsity["Time (ms)"], "o-", color=color, linewidth=1.5)
     ax1.tick_params(axis="y", labelcolor=color)
     ax1.grid(True, which="both", linestyle=":", alpha=0.5)
 
     ax2 = ax1.twinx()
     color = "tab:blue"
     ax2.set_ylabel("Optimality Gap (%)", color=color)
-    ax2.plot(df_sparsity["Sparsity"], df_sparsity["Gap_Percent"], "s--", color=color, linewidth=1.5)
+    ax2.plot(df_sparsity["Sparsity"], df_sparsity["Gap (%)"], "s--", color=color, linewidth=1.5)
     ax2.tick_params(axis="y", labelcolor=color)
 
     plt.title("Sparsity Phase Transition Analysis (eil51)")
@@ -887,13 +891,17 @@ def run_advanced_analyses() -> None:
         opt_cost = INSTANCES["kroA100"]
         gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
         pareto_results.append({"Backtrack_Limit": limit, "Time_MS": elapsed_ms, "Gap_Percent": gap})
-    df_pareto = pd.DataFrame(pareto_results)
+    df_pareto = pd.DataFrame(pareto_results).rename(
+        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
+    )
+    for col in ("Time (ms)", "Gap (%)"):
+        df_pareto[col] = df_pareto[col].map(_format_2dp)
     df_pareto.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
 
     plt.figure(figsize=(6.0, 3.8))
     plt.plot(
-        df_pareto["Time_MS"],
-        df_pareto["Gap_Percent"],
+        df_pareto["Time (ms)"],
+        df_pareto["Gap (%)"],
         "o-",
         color="#CE412B",
         linewidth=1.5,
@@ -902,7 +910,7 @@ def run_advanced_analyses() -> None:
     for _, row in df_pareto.iterrows():
         plt.annotate(
             f"Limit: {int(row['Backtrack_Limit'])}",
-            (row["Time_MS"], row["Gap_Percent"]),
+            (row["Time (ms)"], row["Gap (%)"]),
             textcoords="offset points",
             xytext=(0, 10),
             ha="center",
@@ -958,7 +966,11 @@ def run_advanced_analyses() -> None:
                 "Gap_Percent": gap,
             },
         )
-    df_atsp = pd.DataFrame(atsp_results)
+    df_atsp = pd.DataFrame(atsp_results).rename(
+        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
+    )
+    for col in ("Time (ms)", "Cost", "Gap (%)"):
+        df_atsp[col] = df_atsp[col].map(_format_2dp)
     df_atsp.to_csv(MATERIALS_DIR / "atsp_comparison.csv", index=False)
     print("Advanced analyses complete.")
 
@@ -1076,6 +1088,13 @@ def parse_time_to_ms(time_str: str, unit_str: str) -> float:
     return val
 
 
+def _format_2dp(value: float) -> float | str:
+    """Format a float to two decimal places, preserving NaN for blank CSV cells."""
+    if isinstance(value, float) and math.isnan(value):
+        return value
+    return f"{value:.2f}"
+
+
 def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Parse Divan statistics text output into DataFrames for ablation and group results.
 
@@ -1128,6 +1147,8 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 )
     df_ablation = pd.DataFrame(ablation_data)
     if not df_ablation.empty:
+        for col in ("Initial_Gap_Percent", "Final_Gap_Percent", "Delta_Improvement_Percent"):
+            df_ablation[col] = df_ablation[col].map(_format_2dp)
         df_ablation.to_csv(MATERIALS_DIR / "ablation_2opt_results.csv", index=False)
 
     g1_data = []
@@ -1165,14 +1186,19 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 "GET_NFI_Cost": "GET-NFI",
             },
         ).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
-        df_g1[["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]].rename(
+        df_g1_gaps = df_g1[
+            ["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]
+        ].rename(
             columns={
                 "NN_Gap_Percent": "NN (%)",
                 "FI_Gap_Percent": "FI (%)",
                 "CW_Gap_Percent": "CW (%)",
                 "GET_NFI_Time_MS": "Time (ms)",
             },
-        ).to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
+        )
+        for col in ("NN (%)", "FI (%)", "CW (%)", "Time (ms)"):
+            df_g1_gaps[col] = df_g1_gaps[col].map(_format_2dp)
+        df_g1_gaps.to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
 
     g2_data = []
     g2_match = re.search(
@@ -1213,7 +1239,7 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 "GET_NFI_2Opt_Cost": "GET-NFI",
             },
         ).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
-        df_g2[
+        df_g2_gaps = df_g2[
             [
                 "Instance",
                 "Random_2Opt_Gap_Percent",
@@ -1228,7 +1254,10 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)",
                 "GET_NFI_2Opt_Time_MS": "Time (ms)",
             },
-        ).to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
+        )
+        for col in ("Random (%)", "NN (%)", "GET-NFI (%)", "Time (ms)"):
+            df_g2_gaps[col] = df_g2_gaps[col].map(_format_2dp)
+        df_g2_gaps.to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
 
     return df_ablation, df_g1, df_g2
 
@@ -1317,6 +1346,7 @@ def generate_plots_and_tables() -> None:
     MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    generate_complexity_table()
     df_ablation, df_g1, df_g2 = parse_statistics_output(RAW_STATS_PATH)
     df_divan = parse_divan_benches(RAW_BENCHES_PATH)
 
@@ -1615,15 +1645,46 @@ def _run_solver_for_param(  # noqa: PLR0913
     return elapsed_ms, cost, tour_type
 
 
+_COMPLEXITY_COMPARISON_CSV: str = (
+    "Solver Category,Time Complexity,Space Complexity,Dynamic Alloc.,no_std Ready\n"
+    "Concorde (Exact),$O(2^n n^2)$,Exponential,Heavy Heap,No\n"
+    "Nearest Neighbor,$O(V^2)$,$O(V)$,Minimal Heap,Partial\n"
+    "GA / ACO (Meta-),$O(I dot P dot V^2)$,$O(P dot V + V^2)$,Heavy Heap,No\n"
+    "Dzul's GET-NFI,$O(|E| + |V| d)$,$O(|V|)$ Static,Zero ($O(1)$),Yes\n"
+)
+"""Static theoretical complexity table consumed by ``paper/main.typ``.
+
+The asymptotic bounds mirror the claims already present in the paper text and
+the documented guarantees in ``crates/dzul-core`` (bounded polynomial search,
+zero heap allocation). Cells use Typst math markup; ``paper/main.typ`` renders
+them via ``eval``.
+"""
+
+
+def generate_complexity_table() -> None:
+    """Write the complexity comparison table to ``MATERIALS_DIR``.
+
+    The table is a static theoretical artifact, not a measurement: the time and
+    space bounds match the paper's claims and the ``dzul-core`` implementation
+    (polynomial worst-case search, ``O(|V|)`` static buffers, zero dynamic
+    allocation). ``publish_to_paper()`` mirrors it into ``paper/materials/``.
+
+    """
+    MATERIALS_DIR.mkdir(parents=True, exist_ok=True)
+    dst = MATERIALS_DIR / "complexity_comparison.csv"
+    dst.write_text(_COMPLEXITY_COMPARISON_CSV, encoding="utf-8")
+    print(f"Complexity comparison table written to: {dst}")
+
+
 def publish_to_paper() -> None:
     """Copy exported materials and plots into the sibling ``paper/`` directory.
 
     The paper (``paper/main.typ``) loads its tables and figures from
     ``paper/materials/`` and ``paper/plots/``. This step mirrors the freshly
     generated artifacts into those folders so the paper renders the latest
-    benchmark output. Files that are not re-exported (e.g.,
-    ``complexity_comparison.csv``) are left untouched. No-op when the sibling
-    ``paper/`` directory does not exist (e.g., cloud runs).
+    benchmark output. Files that are not re-exported by the pipeline are left
+    untouched. No-op when the sibling ``paper/`` directory does not exist
+    (e.g., cloud runs).
 
     Raises:
         OSError: If copying an artifact directory fails.
