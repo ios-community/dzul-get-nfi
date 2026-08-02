@@ -19799,11 +19799,65 @@ pub fn instance_node_count(name: &str) -> Option<usize> {
         "pcb3038" => Some(3038),
         "fnl4461" => Some(4461),
         // ATSP instances (known node counts)
-        "ftv33" => Some(33),
+        "ftv33" => Some(34),
+        "ftv38" => Some(39),
         "ry48p" => Some(48),
         "ft53" => Some(53),
+        "ft70" => Some(70),
+        "kro124p" => Some(100),
+        "ftv170" => Some(171),
         _ => None,
     }
+}
+
+/// Loads the explicit weight matrix of a TSPLIB ATSP instance.
+///
+/// Reads ``datasets/{name}.atsp`` (TSPLIB ``EXPLICIT`` / ``FULL_MATRIX``
+/// format) and returns the parsed $n \times n$ weight matrix. Returns
+/// ``None`` when the file is missing or malformed.
+#[must_use]
+pub fn get_atsp_matrix(name: &str) -> Option<Vec<Vec<u64>>> {
+    let cache_path = Path::new("datasets").join(format!("{name}.atsp"));
+    let content = fs::read_to_string(&cache_path).ok()?;
+    parse_atsp_matrix(&content)
+}
+
+/// Parses a TSPLIB ATSP file in ``EDGE_WEIGHT_TYPE: EXPLICIT``,
+/// ``EDGE_WEIGHT_FORMAT: FULL_MATRIX`` format.
+fn parse_atsp_matrix(content: &str) -> Option<Vec<Vec<u64>>> {
+    let mut dimension: usize = 0;
+    let mut in_section = false;
+    let mut values: Vec<u64> = Vec::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("DIMENSION:") {
+            dimension = rest.trim().parse().ok()?;
+            continue;
+        }
+        if line == "EDGE_WEIGHT_SECTION" {
+            in_section = true;
+            continue;
+        }
+        if line == "EOF" {
+            break;
+        }
+        if in_section && !line.is_empty() {
+            for token in line.split_whitespace() {
+                values.push(token.parse().ok()?);
+            }
+        }
+    }
+
+    if dimension == 0 || values.len() < dimension * dimension {
+        return None;
+    }
+
+    let mut matrix = vec![vec![0u64; dimension]; dimension];
+    for (idx, value) in values.iter().take(dimension * dimension).enumerate() {
+        matrix[idx / dimension][idx % dimension] = *value;
+    }
+    Some(matrix)
 }
 
 /// Generates deterministic pseudo-random 2D coordinates for an instance.
@@ -19894,5 +19948,36 @@ mod tests {
         // Synthetic fallback only via explicit `get_synthetic_dataset` request.
         let att532_synth = get_synthetic_dataset("att532").unwrap();
         assert_eq!(att532_synth.len(), 532);
+    }
+
+    /// Tests the TSPLIB ATSP explicit-matrix parser.
+    #[test]
+    fn test_atsp_matrix_parser() {
+        let sample = "\
+NAME: ftv33
+TYPE: ATSP
+DIMENSION: 2
+EDGE_WEIGHT_TYPE: EXPLICIT
+EDGE_WEIGHT_FORMAT: FULL_MATRIX
+EDGE_WEIGHT_SECTION
+   1 2
+   3 4
+EOF
+";
+        let matrix = parse_atsp_matrix(sample).unwrap();
+        assert_eq!(matrix.len(), 2);
+        assert_eq!(matrix[0], vec![1, 2]);
+        assert_eq!(matrix[1], vec![3, 4]);
+    }
+
+    /// Tests that every known ATSP instance has a parseable cached matrix.
+    #[test]
+    fn test_atsp_datasets_parse() {
+        for name in ["ftv33", "ftv38", "ry48p", "ft53", "ft70", "kro124p", "ftv170"] {
+            let matrix = get_atsp_matrix(name);
+            assert!(matrix.is_some(), "missing ATSP matrix for {name}");
+            let n = instance_node_count(name).unwrap();
+            assert_eq!(matrix.unwrap().len(), n);
+        }
     }
 }

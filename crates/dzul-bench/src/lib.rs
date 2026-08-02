@@ -15,8 +15,44 @@ pub mod dataset;
 
 use dzul_core::{Edge, Node, Weight};
 
+pub use dataset::get_atsp_matrix;
 pub use dataset::get_dataset;
 pub use dataset::get_synthetic_dataset;
+pub use dataset::instance_node_count;
+
+/// Builds a directed complete graph from an explicit TSPLIB ATSP weight matrix.
+///
+/// Every pair $(i, j)$ with $i \ne j$ yields a directed edge of weight
+/// ``matrix[i][j]``. Nodes carry zeroed coordinates because explicit ATSP
+/// matrices are non-spatial; the solver's `ZeroHeuristic` (Dijkstra) fallback
+/// is used for tour closure.
+#[must_use]
+pub fn build_matrix_graph(matrix: &[Vec<u64>]) -> (Vec<Node>, Vec<Edge>) {
+    let n = matrix.len();
+    let mut nodes = Vec::with_capacity(n);
+    let mut edges = Vec::with_capacity(n * (n - 1));
+
+    let mut edge_idx = 0;
+    for i in 0..n {
+        let start = edge_idx;
+        for j in 0..n {
+            if i != j {
+                edges.push(Edge {
+                    target: j as u32,
+                    weight: Weight(matrix[i][j]),
+                });
+                edge_idx += 1;
+            }
+        }
+        nodes.push(Node {
+            edge_start: start as u32,
+            edge_end: edge_idx as u32,
+            x: 0,
+            y: 0,
+        });
+    }
+    (nodes, edges)
+}
 
 /// Distance computation mode for graph construction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

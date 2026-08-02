@@ -7,7 +7,7 @@
     clippy::cast_precision_loss
 )]
 
-use dzul_bench::{build_complete_graph, build_incomplete_graph, get_dataset};
+use dzul_bench::{build_complete_graph, build_incomplete_graph, build_matrix_graph, get_atsp_matrix, get_dataset};
 use dzul_core::{Graph, TspConfig, Weight, Workspace, ZeroHeuristic, solve};
 use std::time::Instant;
 
@@ -61,14 +61,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let coords =
-        get_dataset(instance_name).ok_or_else(|| format!("Unknown instance: {instance_name}"))?;
-    let n = coords.len();
-
-    let (nodes, edges) = if (sparsity - 1.0).abs() < 1e-5 {
-        build_complete_graph(&coords, is_directed)
+    let (nodes, edges) = if let Some(matrix) = get_atsp_matrix(instance_name) {
+        build_matrix_graph(&matrix)
     } else {
-        build_incomplete_graph(&coords, sparsity, is_directed)
+        let coords =
+            get_dataset(instance_name).ok_or_else(|| format!("Unknown instance: {instance_name}"))?;
+        if (sparsity - 1.0).abs() < 1e-5 {
+            build_complete_graph(&coords, is_directed)
+        } else {
+            build_incomplete_graph(&coords, sparsity, is_directed)
+        }
     };
 
     let mut edges = edges;

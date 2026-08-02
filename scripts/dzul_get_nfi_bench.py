@@ -8,7 +8,6 @@ This script uses ``uv`` for dependency management and ``ruff`` for linting.
 """
 # ruff: noqa: I001
 
-from __future__ import annotations
 
 
 import argparse
@@ -30,8 +29,7 @@ class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
 
 
-if typing.TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -613,6 +611,20 @@ INSTANCES: dict[str, float] = {
     "kroA100": 21_282.0,
     "lin318": 42_029.0,
     "pcb442": 50_778.0,
+    "pr1002": 0.0,
+    "pcb3038": 0.0,
+    "fnl4461": 0.0,
+}
+# Vertex counts for instances
+INSTANCE_SIZES: dict[str, int] = {
+    "eil51": 51,
+    "pr76": 76,
+    "kroA100": 100,
+    "lin318": 318,
+    "pcb442": 442,
+    "pr1002": 1002,
+    "pcb3038": 3038,
+    "fnl4461": 4461,
 }
 """Mapping of STSP TSPLIB instance names to their known optimal tour costs."""
 
@@ -839,9 +851,7 @@ def run_advanced_analyses() -> None:
         sparsity_results.append(
             {"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type}
         )
-    df_sparsity = pd.DataFrame(sparsity_results).rename(
-        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
-    )
+    df_sparsity = pd.DataFrame(sparsity_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
     for col in ("Time (ms)", "Gap (%)"):
         df_sparsity[col] = df_sparsity[col].map(_format_2dp)
     df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
@@ -891,9 +901,7 @@ def run_advanced_analyses() -> None:
         opt_cost = INSTANCES["kroA100"]
         gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
         pareto_results.append({"Backtrack_Limit": limit, "Time_MS": elapsed_ms, "Gap_Percent": gap})
-    df_pareto = pd.DataFrame(pareto_results).rename(
-        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
-    )
+    df_pareto = pd.DataFrame(pareto_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
     for col in ("Time (ms)", "Gap (%)"):
         df_pareto[col] = df_pareto[col].map(_format_2dp)
     df_pareto.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
@@ -966,9 +974,7 @@ def run_advanced_analyses() -> None:
                 "Gap_Percent": gap,
             },
         )
-    df_atsp = pd.DataFrame(atsp_results).rename(
-        columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"}
-    )
+    df_atsp = pd.DataFrame(atsp_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
     for col in ("Time (ms)", "Cost", "Gap (%)"):
         df_atsp[col] = df_atsp[col].map(_format_2dp)
     df_atsp.to_csv(MATERIALS_DIR / "atsp_comparison.csv", index=False)
@@ -1178,24 +1184,8 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 )
     df_g1 = pd.DataFrame(g1_data)
     if not df_g1.empty:
-        df_g1[["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]].rename(
-            columns={
-                "NN_Cost": "NN",
-                "FI_Cost": "FI",
-                "CW_Cost": "CW",
-                "GET_NFI_Cost": "GET-NFI",
-            },
-        ).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
-        df_g1_gaps = df_g1[
-            ["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]
-        ].rename(
-            columns={
-                "NN_Gap_Percent": "NN (%)",
-                "FI_Gap_Percent": "FI (%)",
-                "CW_Gap_Percent": "CW (%)",
-                "GET_NFI_Time_MS": "Time (ms)",
-            },
-        )
+        df_g1[["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]].rename(columns={"NN_Cost": "NN", "FI_Cost": "FI", "CW_Cost": "CW", "GET_NFI_Cost": "GET-NFI"}).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
+        df_g1_gaps = df_g1[["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]].rename(columns={"NN_Gap_Percent": "NN (%)", "FI_Gap_Percent": "FI (%)", "CW_Gap_Percent": "CW (%)", "GET_NFI_Time_MS": "Time (ms)"})
         for col in ("NN (%)", "FI (%)", "CW (%)", "Time (ms)"):
             df_g1_gaps[col] = df_g1_gaps[col].map(_format_2dp)
         df_g1_gaps.to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
@@ -1228,33 +1218,8 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                 )
     df_g2 = pd.DataFrame(g2_data)
     if not df_g2.empty:
-        df_g2[
-            ["Instance", "Opt", "Random_2Opt_Cost", "NN_2Opt_Cost", "FI_2Opt_Cost", "CW_2Opt_Cost", "GET_NFI_2Opt_Cost"]
-        ].rename(
-            columns={
-                "Random_2Opt_Cost": "Random",
-                "NN_2Opt_Cost": "NN",
-                "FI_2Opt_Cost": "FI",
-                "CW_2Opt_Cost": "CW",
-                "GET_NFI_2Opt_Cost": "GET-NFI",
-            },
-        ).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
-        df_g2_gaps = df_g2[
-            [
-                "Instance",
-                "Random_2Opt_Gap_Percent",
-                "NN_2Opt_Gap_Percent",
-                "GET_NFI_2Opt_Gap_Percent",
-                "GET_NFI_2Opt_Time_MS",
-            ]
-        ].rename(
-            columns={
-                "Random_2Opt_Gap_Percent": "Random (%)",
-                "NN_2Opt_Gap_Percent": "NN (%)",
-                "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)",
-                "GET_NFI_2Opt_Time_MS": "Time (ms)",
-            },
-        )
+        df_g2[["Instance", "Opt", "Random_2Opt_Cost", "NN_2Opt_Cost", "FI_2Opt_Cost", "CW_2Opt_Cost", "GET_NFI_2Opt_Cost"]].rename(columns={"Random_2Opt_Cost": "Random", "NN_2Opt_Cost": "NN", "FI_2Opt_Cost": "FI", "CW_2Opt_Cost": "CW", "GET_NFI_2Opt_Cost": "GET-NFI"}).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
+        df_g2_gaps = df_g2[["Instance", "Random_2Opt_Gap_Percent", "NN_2Opt_Gap_Percent", "GET_NFI_2Opt_Gap_Percent", "GET_NFI_2Opt_Time_MS"]].rename(columns={"Random_2Opt_Gap_Percent": "Random (%)", "NN_2Opt_Gap_Percent": "NN (%)", "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)", "GET_NFI_2Opt_Time_MS": "Time (ms)"})
         for col in ("Random (%)", "NN (%)", "GET-NFI (%)", "Time (ms)"):
             df_g2_gaps[col] = df_g2_gaps[col].map(_format_2dp)
         df_g2_gaps.to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
@@ -1396,6 +1361,8 @@ def generate_plots_and_tables() -> None:
     # --- Legacy experiment table & memory plots (if CSV_RESULTS_PATH exists) ---
     if CSV_RESULTS_PATH.exists():
         df = pd.read_csv(CSV_RESULTS_PATH)
+        # add vertex count for numeric X-axis
+        df["N"] = df["Instance"].map(INSTANCE_SIZES)
 
         latex_path = MATERIALS_DIR / "get_nfi_benchmark_table.tex"
         with latex_path.open("w") as f:
@@ -1467,7 +1434,7 @@ def generate_plots_and_tables() -> None:
         complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
         if not complete_df.empty:
             ax.plot(
-                complete_df["Instance"],
+                complete_df["N"],
                 complete_df["RSS_KB"] / 1024,
                 "-o",
                 color="#CE412B",
@@ -1475,14 +1442,14 @@ def generate_plots_and_tables() -> None:
                 linewidth=1.5,
             )
             ax.plot(
-                complete_df["Instance"],
+                complete_df["N"],
                 complete_df["USS_KB"] / 1024,
                 "--d",
                 color="#3776AB",
                 label="Peak USS (MB)",
                 linewidth=1.5,
             )
-            ax.set_xlabel("TSPLIB Instance")
+            ax.set_xlabel("Number of Vertices (N)")
             ax.set_ylabel("Physical Memory (MB)")
             ax.set_title("Memory Footprint vs. Instance Size")
             ax.grid(True, which="both", linestyle=":", alpha=0.5)
@@ -1774,7 +1741,7 @@ def main() -> None:
 
     setup_environment()
     lint_script()
-    profile_hardware()
+
 
     # Core benchmarks (authoritative — matches notebook output)
     run_statistics_suite()
