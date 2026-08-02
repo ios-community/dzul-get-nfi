@@ -6,6 +6,7 @@ plots and LaTeX tables, and performing statistical analysis.
 
 This script uses ``uv`` for dependency management and ``ruff`` for linting.
 """
+
 # ruff: noqa: I001
 import argparse
 import json
