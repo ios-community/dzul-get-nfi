@@ -21,15 +21,14 @@ import shutil
 import subprocess
 import sys
 import time
-import typing
+
 import zipfile
+import pandas as pd
 
 
 class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
 
-
-import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
