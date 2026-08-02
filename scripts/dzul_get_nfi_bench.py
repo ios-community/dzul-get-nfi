@@ -13,16 +13,15 @@ import argparse
 import json
 import math
 import os
+from pathlib import Path
 import platform
 import re
 import shutil
 import subprocess
 import sys
 import time
+import typing
 import zipfile
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 
 class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
@@ -1179,7 +1178,6 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
         df_g2.to_csv(MATERIALS_DIR / "group2_2opt_results.csv", index=False)
 
     return df_ablation, df_g1, df_g2
-
 
 def parse_divan_benches(filepath: Path) -> pd.DataFrame:
     """Parse Divan benchmark text output into a DataFrame.
