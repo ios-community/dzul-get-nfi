@@ -1182,11 +1182,25 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
     df_g1 = pd.DataFrame(g1_data)
     if not df_g1.empty:
         df_g1[
-    ["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]
-].rename(
-    columns={"NN_Cost": "NN", "FI_Cost": "FI", "CW_Cost": "CW", "GET_NFI_Cost": "GET-NFI"}
-).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
-        df_g1_gaps = df_g1[["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]].rename(columns={"NN_Gap_Percent": "NN (%)", "FI_Gap_Percent": "FI (%)", "CW_Gap_Percent": "CW (%)", "GET_NFI_Time_MS": "Time (ms)"})
+            ["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]
+        ].rename(
+            columns={
+                "NN_Cost": "NN",
+                "FI_Cost": "FI",
+                "CW_Cost": "CW",
+                "GET_NFI_Cost": "GET-NFI",
+            }
+        ).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
+        df_g1_gaps = df_g1[
+            ["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]
+        ].rename(
+            columns={
+                "NN_Gap_Percent": "NN (%)",
+                "FI_Gap_Percent": "FI (%)",
+                "CW_Gap_Percent": "CW (%)",
+                "GET_NFI_Time_MS": "Time (ms)",
+            }
+        )
         for col in ("NN (%)", "FI (%)", "CW (%)", "Time (ms)"):
             df_g1_gaps[col] = df_g1_gaps[col].map(_format_2dp)
         df_g1_gaps.to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
@@ -1220,11 +1234,26 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
     df_g2 = pd.DataFrame(g2_data)
     if not df_g2.empty:
         df_g2[
-    ["Instance", "Opt", "Random_2Opt_Cost", "NN_2Opt_Cost", "FI_2Opt_Cost", "CW_2Opt_Cost", "GET_NFI_2Opt_Cost"]
-].rename(
-    columns={"Random_2Opt_Cost": "Random", "NN_2Opt_Cost": "NN", "FI_2Opt_Cost": "FI", "CW_2Opt_Cost": "CW", "GET_NFI_2Opt_Cost": "GET-NFI"}
-).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
-        df_g2_gaps = df_g2[["Instance", "Random_2Opt_Gap_Percent", "NN_2Opt_Gap_Percent", "GET_NFI_2Opt_Gap_Percent", "GET_NFI_2Opt_Time_MS"]].rename(columns={"Random_2Opt_Gap_Percent": "Random (%)", "NN_2Opt_Gap_Percent": "NN (%)", "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)", "GET_NFI_2Opt_Time_MS": "Time (ms)"})
+            ["Instance", "Opt", "Random_2Opt_Cost", "NN_2Opt_Cost", "FI_2Opt_Cost", "CW_2Opt_Cost", "GET_NFI_2Opt_Cost"]
+        ].rename(
+            columns={
+                "Random_2Opt_Cost": "Random",
+                "NN_2Opt_Cost": "NN",
+                "FI_2Opt_Cost": "FI",
+                "CW_2Opt_Cost": "CW",
+                "GET_NFI_2Opt_Cost": "GET-NFI",
+            }
+        ).to_csv(MATERIALS_DIR / "twoopt_costs.csv", index=False)
+        df_g2_gaps = df_g2[
+            ["Instance", "Random_2Opt_Gap_Percent", "NN_2Opt_Gap_Percent", "GET_NFI_2Opt_Gap_Percent", "GET_NFI_2Opt_Time_MS"]
+        ].rename(
+            columns={
+                "Random_2Opt_Gap_Percent": "Random (%)",
+                "NN_2Opt_Gap_Percent": "NN (%)",
+                "GET_NFI_2Opt_Gap_Percent": "GET-NFI (%)",
+                "GET_NFI_2Opt_Time_MS": "Time (ms)",
+            }
+        )
         for col in ("Random (%)", "NN (%)", "GET-NFI (%)", "Time (ms)"):
             df_g2_gaps[col] = df_g2_gaps[col].map(_format_2dp)
         df_g2_gaps.to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
