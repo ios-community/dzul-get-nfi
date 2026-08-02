@@ -6,8 +6,10 @@ plots and LaTeX tables, and performing statistical analysis.
 
 This script uses ``uv`` for dependency management and ``ruff`` for linting.
 """
+# ruff: noqa: I001
 
 from __future__ import annotations
+  # ruff: noqa: I001
 
 import argparse
 import json
@@ -23,8 +25,10 @@ import time
 import typing
 import zipfile
 
+
 class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
+
 
 if typing.TYPE_CHECKING:
     import pandas as pd
@@ -1178,6 +1182,7 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
         df_g2.to_csv(MATERIALS_DIR / "group2_2opt_results.csv", index=False)
 
     return df_ablation, df_g1, df_g2
+
 
 def parse_divan_benches(filepath: Path) -> pd.DataFrame:
     """Parse Divan benchmark text output into a DataFrame.
