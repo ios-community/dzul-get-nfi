@@ -689,10 +689,9 @@ def algorithmic_workspace_mib(node_count: int) -> float:
         The workspace footprint in MiB (linear in ``node_count``).
 
     """
-    bytes_per_node = (
-        _ALGORITHMIC_WORKSPACE_MB_AT_FNL4461 * (1024**2) / INSTANCE_SIZES["fnl4461"]
-    )
+    bytes_per_node = _ALGORITHMIC_WORKSPACE_MB_AT_FNL4461 * (1024**2) / INSTANCE_SIZES["fnl4461"]
     return node_count * bytes_per_node / (1024**2)
+
 
 # Instances used by the sparsity phase transition sweep, with known optima.
 SPARSITY_INSTANCES: dict[str, float] = {
