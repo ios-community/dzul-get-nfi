@@ -1074,8 +1074,8 @@ def run_advanced_analyses() -> None:
     fig_sp, (ax_time, ax_gap) = plt.subplots(1, 2, figsize=(9.0, 3.8), sharex=True)
     instance_styles = [
         ("eil76", "o", "#CE412B"),
-        ("a280", "s", "#3776AB"),
-        ("u724", "^", "#2F9E44"),
+        ("a280", "o", "#3776AB"),
+        ("u724", "o", "#2F9E44"),
     ]
     for instance, marker, series_color in instance_styles:
         sub = df_sparsity[df_sparsity["Instance"] == instance]
@@ -1151,28 +1151,17 @@ def run_advanced_analyses() -> None:
     df_pareto_display.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
 
     plt.figure(figsize=(6.0, 3.8))
-    plt.plot(
+    scatter = plt.scatter(
         df_pareto["Time (ms)"],
         df_pareto["Gap (%)"],
-        "o-",
-        color="#CE412B",
-        linewidth=1.5,
-        markersize=6,
+        c=df_pareto["Backtrack_Limit"],
+        cmap="Reds",
+        marker="o",
+        s=25,
+        edgecolor="k"
     )
-    for i, (_, row) in enumerate(df_pareto.iterrows()):
-        # Staggered vertical offsets keep adjacent ``Limit: N`` labels from
-        # overlapping on the populated gap axis.
-        offset_y = 12 if i % 2 == 0 else -16
-        plt.annotate(
-            f"Limit: {int(row['Backtrack_Limit'])}",
-            (row["Time (ms)"], row["Gap (%)"]),
-            textcoords="offset points",
-            xytext=(0, offset_y),
-            ha="center",
-            fontsize=7,
-            arrowprops={"arrowstyle": "->", "color": "gray", "lw": 0.5},
-        )
-
+    cbar = plt.colorbar(scatter)
+    cbar.set_label("Backtrack Limit")
     plt.xlabel("Execution Time (ms)")
     plt.ylabel("Optimality Gap (%)")
     plt.title("Pareto Frontier Analysis (pcb442, Complete Graph)")
@@ -1736,18 +1725,19 @@ def generate_plots_and_tables() -> None:
     df_divan = parse_divan_benches(RAW_BENCHES_PATH)
     generate_statistical_summary(df_g1, df_ablation)
 
-    plt.rcParams.update(
-        {
-            "font.family": "serif",
-            "font.serif": ["Times New Roman"],
-            "font.size": 10,
-            "axes.labelsize": 10,
-            "axes.titlesize": 10,
-            "xtick.labelsize": 9,
-            "ytick.labelsize": 9,
-            "legend.fontsize": 9,
-        },
-    )
+    plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "DejaVu Serif", "Liberation Serif", "serif"],
+    "font.size": 9,
+    "axes.labelsize": 9.5,
+    "axes.titlesize": 10,
+    "xtick.labelsize": 8.5,
+    "ytick.labelsize": 8.5,
+    "legend.fontsize": 8.5,
+    "lines.markersize": 5,
+    "lines.linewidth": 1.5,
+    "figure.dpi": 300,
+})
 
     # --- Latency comparison plots from Divan data ---
     if not df_divan.empty:
