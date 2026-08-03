@@ -760,7 +760,7 @@ def run_main_experiments() -> None:
                     gap = float("nan")
                     tour_type = "Disconnected"
                 else:
-                    gap = ((cost - opt_cost) / opt_cost) * 100.0
+                     gap = ((cost - opt_cost) / opt_cost) * 100.0 if opt_cost != 0 else float('nan')
 
                 results.append(
                     {
