@@ -79,6 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         edges: &mut edges,
         is_directed,
     };
+    let n = nodes.len();
 
     let mut path_stack = vec![0u32; n * 4];
     let mut next_edge_idx = vec![0u32; n];
