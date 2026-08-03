@@ -23,11 +23,14 @@ pub use dataset::instance_node_count;
 /// Builds a directed complete graph from an explicit TSPLIB ATSP weight matrix.
 ///
 /// Every pair $(i, j)$ with $i \ne j$ yields a directed edge of weight
-/// ``matrix[i][j]``. Nodes carry zeroed coordinates because explicit ATSP
-/// matrices are non-spatial; the solver's `ZeroHeuristic` (Dijkstra) fallback
-/// is used for tour closure.
+/// ``matrix[i][j]`` (scaled into the solver's fixed-point representation, i.e.
+/// multiplied by `1_000_000`, so reported costs match raw TSPLIB units).
+/// Nodes carry zeroed coordinates because explicit ATSP matrices are
+/// non-spatial; the solver's `ZeroHeuristic` (Dijkstra) fallback is used for
+/// tour closure.
 #[must_use]
 pub fn build_matrix_graph(matrix: &[Vec<u64>]) -> (Vec<Node>, Vec<Edge>) {
+    const FIXED_POINT_SCALE: u64 = 1_000_000;
     let n = matrix.len();
     let mut nodes = Vec::with_capacity(n);
     let mut edges = Vec::with_capacity(n * (n - 1));
@@ -39,7 +42,7 @@ pub fn build_matrix_graph(matrix: &[Vec<u64>]) -> (Vec<Node>, Vec<Edge>) {
             if i != j {
                 edges.push(Edge {
                     target: j as u32,
-                    weight: Weight(matrix[i][j]),
+                    weight: Weight(matrix[i][j] * FIXED_POINT_SCALE),
                 });
                 edge_idx += 1;
             }

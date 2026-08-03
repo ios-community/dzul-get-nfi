@@ -12,3 +12,5 @@ scripts/__pycache__/
 scripts/materials/
 scripts/plots/
 scripts/get_nfi_results.zip
+dzul_get_nfi_bench.exe
+scripts/*.log

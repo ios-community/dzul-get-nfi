@@ -7,9 +7,46 @@
     clippy::cast_precision_loss
 )]
 
-use dzul_bench::{build_complete_graph, build_incomplete_graph, build_matrix_graph, get_atsp_matrix, get_dataset};
-use dzul_core::{Graph, TspConfig, Weight, Workspace, ZeroHeuristic, solve};
+use dzul_bench::{
+    build_complete_graph, build_incomplete_graph, build_matrix_graph, get_atsp_matrix, get_dataset,
+};
+use dzul_core::{Graph, TourType, TspConfig, Weight, Workspace, ZeroHeuristic, solve};
 use std::time::Instant;
+
+/// Validates that a solver tour is a closed cycle covering every vertex.
+///
+/// The returned path must start and end at the same node ($v_"finish" = v_"start"$)
+/// and must cover all $N$ unique vertices. A strict Hamiltonian cycle must also
+/// contain exactly $N + 1$ path elements; a `ClosedWalk` (A* fallback on sparse
+/// graphs) may revisit nodes and is only required to cover every vertex.
+fn validate_tour(path: &[u32], n: usize, tour_type: TourType) -> Result<(), String> {
+    let Some(&first) = path.first() else {
+        return Err("tour path is empty".to_owned());
+    };
+    let Some(&last) = path.last() else {
+        return Err("tour path is empty".to_owned());
+    };
+    if first != last {
+        return Err(format!(
+            "tour does not close: v_finish ({last}) != v_start ({first})"
+        ));
+    }
+    let mut seen = vec![false; n];
+    for &node in path {
+        let node_idx = node as usize;
+        if node_idx >= n {
+            return Err(format!("tour references node {node} outside range 0..{n}"));
+        }
+        seen[node_idx] = true;
+    }
+    if !seen.iter().all(|&visited| visited) {
+        return Err("tour does not cover every one of the N vertices".to_owned());
+    }
+    if tour_type == TourType::StrictCycle && path.len() != n + 1 {
+        return Err(format!("strict cycle length {} != N+1 ({n})", path.len()));
+    }
+    Ok(())
+}
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,8 +101,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (nodes, edges) = if let Some(matrix) = get_atsp_matrix(instance_name) {
         build_matrix_graph(&matrix)
     } else {
-        let coords =
-            get_dataset(instance_name).ok_or_else(|| format!("Unknown instance: {instance_name}"))?;
+        let coords = get_dataset(instance_name)
+            .ok_or_else(|| format!("Unknown instance: {instance_name}"))?;
         if (sparsity - 1.0).abs() < 1e-5 {
             build_complete_graph(&coords, is_directed)
         } else {
@@ -132,6 +169,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = solve(&mut graph, &mut workspace, &ZeroHeuristic, &config)?;
     let elapsed = start_time.elapsed();
 
+    if let Err(msg) = validate_tour(result.path, n, result.tour_type) {
+        eprintln!("TOUR_VALIDATION_ERROR: {msg}");
+        std::process::exit(1);
+    }
+    println!("TOUR_VALID: true");
     println!("ELAPSED_MS: {:.6}", elapsed.as_secs_f64() * 1000.0);
     println!("COST: {:.6}", result.total_cost.to_float());
     println!("TOUR_TYPE: {:?}", result.tour_type);

@@ -19813,13 +19813,28 @@ pub fn instance_node_count(name: &str) -> Option<usize> {
 /// Loads the explicit weight matrix of a TSPLIB ATSP instance.
 ///
 /// Reads ``datasets/{name}.atsp`` (TSPLIB ``EXPLICIT`` / ``FULL_MATRIX``
-/// format) and returns the parsed $n \times n$ weight matrix. Returns
-/// ``None`` when the file is missing or malformed.
+/// format) and returns the parsed $n \times n$ weight matrix. The workspace
+/// root ``datasets/`` directory is resolved relative to the current directory
+/// (CLI runs) and relative to the crate manifest directory (unit tests).
+/// Returns ``None`` when no file is found or it is malformed.
 #[must_use]
 pub fn get_atsp_matrix(name: &str) -> Option<Vec<Vec<u64>>> {
-    let cache_path = Path::new("datasets").join(format!("{name}.atsp"));
-    let content = fs::read_to_string(&cache_path).ok()?;
-    parse_atsp_matrix(&content)
+    let filename = format!("{name}.atsp");
+    let mut candidates = vec![
+        Path::new("datasets").join(&filename),
+        Path::new("../datasets").join(&filename),
+    ];
+    candidates.push(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../datasets")
+            .join(&filename),
+    );
+    for cache_path in &candidates {
+        if let Ok(content) = fs::read_to_string(cache_path) {
+            return parse_atsp_matrix(&content);
+        }
+    }
+    None
 }
 
 /// Parses a TSPLIB ATSP file in ``EDGE_WEIGHT_TYPE: EXPLICIT``,
@@ -19973,7 +19988,9 @@ EOF
     /// Tests that every known ATSP instance has a parseable cached matrix.
     #[test]
     fn test_atsp_datasets_parse() {
-        for name in ["ftv33", "ftv38", "ry48p", "ft53", "ft70", "kro124p", "ftv170"] {
+        for name in [
+            "ftv33", "ftv38", "ry48p", "ft53", "ft70", "kro124p", "ftv170",
+        ] {
             let matrix = get_atsp_matrix(name);
             assert!(matrix.is_some(), "missing ATSP matrix for {name}");
             let n = instance_node_count(name).unwrap();

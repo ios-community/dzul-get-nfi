@@ -608,9 +608,9 @@ INSTANCES: dict[str, float] = {
     "kroA100": 21_282.0,
     "lin318": 42_029.0,
     "pcb442": 50_778.0,
-    "pr1002": 0.0,
-    "pcb3038": 0.0,
-    "fnl4461": 0.0,
+    "pr1002": 259_045.0,
+    "pcb3038": 137_694.0,
+    "fnl4461": 182_566.0,
 }
 # Vertex counts for instances
 INSTANCE_SIZES: dict[str, int] = {
@@ -627,10 +627,25 @@ INSTANCE_SIZES: dict[str, int] = {
 
 ATSP_INSTANCES: dict[str, float] = {
     "ftv33": 1_286.0,
+    "ftv38": 1_530.0,
     "ry48p": 14_422.0,
     "ft53": 6_905.0,
+    "ft70": 38_673.0,
+    "kro124p": 36_230.0,
+    "ftv170": 2_755.0,
 }
 """Mapping of ATSP TSPLIB instance names to their known optimal tour costs."""
+
+# Instances (ordered by size) displayed on the memory footprint plot.
+MEMORY_PLOT_INSTANCES: list[str] = ["eil51", "pr76", "kroA100", "lin318", "pcb442", "fnl4461"]
+
+# Instances used by the sparsity phase transition sweep, with known optima.
+SPARSITY_INSTANCES: dict[str, float] = {
+    "eil76": 538.0,
+    "a280": 2_579.0,
+    "u724": 41_910.0,
+}
+"""Mapping of sparsity sweep instance names to their known optimal tour costs."""
 
 
 def run_main_experiments() -> None:
@@ -760,8 +775,7 @@ def run_main_experiments() -> None:
                     gap = float("nan")
                     tour_type = "Disconnected"
                 else:
-                     gap = ((cost - opt_cost) / opt_cost) * 100.0 if opt_cost != 0 else float('nan')
-
+                    gap = ((cost - opt_cost) / opt_cost) * 100.0 if opt_cost != 0 else float("nan")
                 results.append(
                     {
                         "Instance": instance,
@@ -811,63 +825,92 @@ def run_advanced_analyses() -> None:
         print(f"Notice: Compiled solver binary not found at {RUST_BIN_PATH}.")
         print("Skipping binary execution. Optimality gaps and costs will use default values.")
 
-    # --- Sparsity Phase Transition ---
+    # --- Sparsity Phase Transition (multi-instance) ---
     print("\nRunning Sparsity Phase Transition Analysis...")
     sparsity_levels = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    sparsity_instances = ["eil76", "a280", "u724"]
     sparsity_results: list[dict[str, float | str]] = []
-    for sparsity in sparsity_levels:
-        print(f"  Testing Sparsity Level: {sparsity * 100:.0f}%")
+    for instance in sparsity_instances:
+        opt_cost = SPARSITY_INSTANCES[instance]
+        for sparsity in sparsity_levels:
+            print(f"  Testing {instance} | Sparsity Level: {sparsity * 100:.0f}%")
 
-        cost = float("nan")
-        elapsed_ms: float = float("nan")
-        tour_type = "N/A"
-        solver_ok = False
-        if bin_exists:
-            cmd = [
-                str(RUST_BIN_PATH),
-                "--instance",
-                "eil51",
-                "--sparsity",
-                str(sparsity),
-                "--backtracks",
-                "1000",
-                "--2opt",
-            ]
-            ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
-            if ret.returncode == 0:
-                elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
-                solver_ok = True
-
-        if not solver_ok or cost is None or cost <= 0.0:
-            tour_type = "Disconnected"
-            elapsed_ms = float("nan")
             cost = float("nan")
+            elapsed_ms: float = float("nan")
+            tour_type = "N/A"
+            solver_ok = False
+            if bin_exists:
+                cmd = [
+                    str(RUST_BIN_PATH),
+                    "--instance",
+                    instance,
+                    "--sparsity",
+                    str(sparsity),
+                    "--backtracks",
+                    "1000",
+                    "--2opt",
+                ]
+                ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
+                if ret.returncode == 0:
+                    elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
+                    solver_ok = True
 
-        opt_cost = INSTANCES["eil51"]
-        gap = float("nan") if tour_type == "Disconnected" else ((cost - opt_cost) / opt_cost) * 100.0
-        sparsity_results.append(
-            {"Sparsity": sparsity, "Time_MS": elapsed_ms, "Gap_Percent": gap, "Tour_Type": tour_type}
-        )
-    df_sparsity = pd.DataFrame(sparsity_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
+            if not solver_ok or cost is None or cost <= 0.0:
+                tour_type = "Disconnected"
+                elapsed_ms = float("nan")
+                cost = float("nan")
+
+            gap = float("nan") if tour_type == "Disconnected" else ((cost - opt_cost) / opt_cost) * 100.0
+            sparsity_results.append(
+                {
+                    "Instance": instance,
+                    "Sparsity": sparsity,
+                    "Time_MS": elapsed_ms,
+                    "Gap_Percent": gap,
+                    "Tour_Type": tour_type,
+                },
+            )
+    df_sparsity = pd.DataFrame(sparsity_results)
+    df_sparsity = df_sparsity.rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
+    df_sparsity_display = df_sparsity.copy()
     for col in ("Time (ms)", "Gap (%)"):
-        df_sparsity[col] = df_sparsity[col].map(_format_2dp)
-    df_sparsity.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
+        df_sparsity_display[col] = df_sparsity_display[col].map(_format_2dp)
+    df_sparsity_display.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
     fig, ax1 = plt.subplots(figsize=(6.0, 3.8))
     color = "tab:red"
     ax1.set_xlabel("Sparsity Level (Ratio of Kept Edges)")
     ax1.set_ylabel("Execution Time (ms)", color=color)
-    ax1.plot(df_sparsity["Sparsity"], df_sparsity["Time (ms)"], "o-", color=color, linewidth=1.5)
     ax1.tick_params(axis="y", labelcolor=color)
     ax1.grid(True, which="both", linestyle=":", alpha=0.5)
 
     ax2 = ax1.twinx()
     color = "tab:blue"
     ax2.set_ylabel("Optimality Gap (%)", color=color)
-    ax2.plot(df_sparsity["Sparsity"], df_sparsity["Gap (%)"], "s--", color=color, linewidth=1.5)
     ax2.tick_params(axis="y", labelcolor=color)
 
-    plt.title("Sparsity Phase Transition Analysis (eil51)")
+    instance_styles = [
+        ("eil76", "o", "#CE412B"),
+        ("a280", "s", "#3776AB"),
+        ("u724", "^", "#2F9E44"),
+    ]
+    for instance, marker, series_color in instance_styles:
+        sub = df_sparsity[df_sparsity["Instance"] == instance]
+        ax1.plot(sub["Sparsity"], sub["Time (ms)"], f"{marker}-", color=series_color, linewidth=1.5)
+        ax2.plot(
+            sub["Sparsity"],
+            sub["Gap (%)"],
+            f"{marker}--",
+            color=series_color,
+            linewidth=1.5,
+            label=f"{instance} (Gap)",
+        )
+
+    ax1.plot([], [], "-", color="#333333", label="Execution Time (ms)")
+    ax1.plot([], [], "--", color="#333333", label="Optimality Gap (%)")
+    ax1.legend(loc="upper right", fontsize=8)
+
+    plt.title("Sparsity Phase Transition Analysis (eil76, a280, u724)")
     fig.tight_layout()
     plt.savefig(PLOTS_DIR / "sparsity_phase_transition.pdf", format="pdf", bbox_inches="tight")
     plt.close()
@@ -884,7 +927,7 @@ def run_advanced_analyses() -> None:
             cmd = [
                 str(RUST_BIN_PATH),
                 "--instance",
-                "kroA100",
+                "pcb442",
                 "--sparsity",
                 "1.0",
                 "--backtracks",
@@ -895,13 +938,14 @@ def run_advanced_analyses() -> None:
             if ret.returncode == 0:
                 elapsed_ms, cost, tour_type = parse_benchmark_output(ret.stdout)
 
-        opt_cost = INSTANCES["kroA100"]
+        opt_cost = INSTANCES["pcb442"]
         gap = float("nan") if tour_type == "N/A" else ((cost - opt_cost) / opt_cost) * 100.0
         pareto_results.append({"Backtrack_Limit": limit, "Time_MS": elapsed_ms, "Gap_Percent": gap})
     df_pareto = pd.DataFrame(pareto_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
+    df_pareto_display = df_pareto.copy()
     for col in ("Time (ms)", "Gap (%)"):
-        df_pareto[col] = df_pareto[col].map(_format_2dp)
-    df_pareto.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
+        df_pareto_display[col] = df_pareto_display[col].map(_format_2dp)
+    df_pareto_display.to_csv(MATERIALS_DIR / "pareto_frontier.csv", index=False)
 
     plt.figure(figsize=(6.0, 3.8))
     plt.plot(
@@ -912,19 +956,21 @@ def run_advanced_analyses() -> None:
         linewidth=1.5,
         markersize=6,
     )
-    for _, row in df_pareto.iterrows():
+    for i, (_, row) in enumerate(df_pareto.iterrows()):
+        offset_y = 10 if i % 2 == 0 else -18
         plt.annotate(
             f"Limit: {int(row['Backtrack_Limit'])}",
             (row["Time (ms)"], row["Gap (%)"]),
             textcoords="offset points",
-            xytext=(0, 10),
+            xytext=(0, offset_y),
             ha="center",
-            fontsize=8,
+            fontsize=7,
+            arrowprops={"arrowstyle": "->", "color": "gray", "lw": 0.5},
         )
 
     plt.xlabel("Execution Time (ms)")
     plt.ylabel("Optimality Gap (%)")
-    plt.title("Pareto Frontier Analysis (kroA100, Complete Graph)")
+    plt.title("Pareto Frontier Analysis (pcb442, Complete Graph)")
     plt.grid(True, which="both", linestyle=":", alpha=0.5)
     plt.tight_layout()
     plt.savefig(PLOTS_DIR / "pareto_frontier.pdf", format="pdf", bbox_inches="tight")
@@ -971,6 +1017,12 @@ def run_advanced_analyses() -> None:
                 "Gap_Percent": gap,
             },
         )
+
+    invalid_gaps = [r["Instance"] for r in atsp_results if not math.isnan(r["Gap_Percent"]) and r["Gap_Percent"] < 0.0]
+    if invalid_gaps:
+        msg = f"ATSP tour validation failed: negative optimality gaps for instances {invalid_gaps}."
+        raise RuntimeError(msg)
+
     df_atsp = pd.DataFrame(atsp_results).rename(columns={"Time_MS": "Time (ms)", "Gap_Percent": "Gap (%)"})
     for col in ("Time (ms)", "Cost", "Gap (%)"):
         df_atsp[col] = df_atsp[col].map(_format_2dp)
@@ -1260,6 +1312,126 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
     return df_ablation, df_g1, df_g2
 
 
+def parse_wilcoxon_summary(filepath: Path) -> dict[str, tuple[float, float]]:
+    """Parse ``W`` / ``p`` pairs from the Rust statistics suite output.
+
+    The Rust integration test prints one ``Wilcoxon (NAME): W=..., p=...``
+    line per paired comparison. Returns a mapping of comparison name to a
+    ``(W, p)`` tuple.
+
+    Args:
+        filepath: Path to the raw ``cargo test --test statistics`` output.
+
+    Returns:
+        A dictionary of comparison labels to ``(W, p)`` values.
+
+    """
+    result: dict[str, tuple[float, float]] = {}
+    if not filepath.exists():
+        return result
+    pattern = re.compile(r"Wilcoxon \((.+?)\): W=([\d.]+), p=([\d.]+)")
+    with filepath.open("r", encoding="utf-8") as f:
+        for line in f:
+            match = pattern.search(line)
+            if match:
+                result[match.group(1)] = (float(match.group(2)), float(match.group(3)))
+    return result
+
+
+def generate_statistical_summary(df_g1: pd.DataFrame, df_ablation: pd.DataFrame) -> None:
+    """Write the formal Wilcoxon statistical summary table to ``MATERIALS_DIR``.
+
+    Builds ``materials/statistical_summary.csv`` with one row per paired
+    comparison (GET-NFI vs NN/FI/CW on pure-constructive optimality gaps, plus
+    the Candidate-Set 2-Opt ablation). The ``W`` statistic and ``p``-value are
+    taken verbatim from the Rust statistics suite output (see
+    :func:`parse_wilcoxon_summary`); the rank-biserial effect size ``r`` is
+    recomputed here from the parsed gap data. Significance is determined at an
+    alpha level of 0.05.
+
+    Args:
+        df_g1: Group 1 (pure constructive) DataFrame from
+            :func:`parse_statistics_output`.
+        df_ablation: 2-Opt ablation DataFrame from
+            :func:`parse_statistics_output`.
+
+    """
+    try:
+        import numpy as np
+        import pandas as pd
+        from scipy import stats
+    except ImportError as exc:
+        msg = "Missing Python dependencies. Run setup_environment() first."
+        raise ImportError(msg) from exc
+
+    def rank_biserial(x: np.ndarray, y: np.ndarray) -> float:
+        """Compute the rank-biserial correlation as a non-parametric effect size."""
+        diff = x - y
+        diff = diff[diff != 0]
+        n = len(diff)
+        if n == 0:
+            return 0.0
+        ranks = stats.rankdata(np.abs(diff))
+        pos_sum = float(np.sum(ranks[diff > 0]))
+        neg_sum = float(np.sum(ranks[diff < 0]))
+        total_rank_sum = n * (n + 1) / 2
+        return (pos_sum - neg_sum) / total_rank_sum
+
+    def to_float(series: pd.Series) -> np.ndarray:
+        """Convert a parsed column to a float array, coercing formatted strings."""
+        return pd.to_numeric(series, errors="coerce").to_numpy(dtype=float)
+
+    def gap_from_costs(series: pd.Series) -> np.ndarray:
+        """Compute optimality gaps in percent from parsed cost columns."""
+        costs = to_float(series)
+        opt = to_float(df_g1["Opt"])
+        return np.where(opt > 0, (costs - opt) / opt * 100.0, np.nan)
+
+    wilcoxon_results = parse_wilcoxon_summary(RAW_STATS_PATH)
+
+    rows: list[dict[str, str]] = []
+    if not df_g1.empty:
+        gaps_nn = gap_from_costs(df_g1["NN_Cost"])
+        gaps_fi = gap_from_costs(df_g1["FI_Cost"])
+        gaps_cw = gap_from_costs(df_g1["CW_Cost"])
+        gaps_nfi = gap_from_costs(df_g1["GET_NFI_Cost"])
+        gap_pairs: dict[str, np.ndarray] = {
+            "GET-NFI vs NN": gaps_nn,
+            "GET-NFI vs FI": gaps_fi,
+            "GET-NFI vs CW": gaps_cw,
+        }
+        for label in ("GET-NFI vs NN", "GET-NFI vs FI", "GET-NFI vs CW"):
+            w_val, p_val = wilcoxon_results.get(label, (float("nan"), float("nan")))
+            r_val = rank_biserial(gaps_nfi, gap_pairs[label])
+            rows.append(
+                {
+                    "Comparison": f"{label} (Gap)",
+                    "W-statistic": f"{w_val:.1f}",
+                    "p-value": f"{p_val:.4f}",
+                    "Effect Size (r)": f"{r_val:.2f}",
+                    "Result": "Significant" if p_val < 0.05 else "Not Significant",
+                },
+            )
+    if not df_ablation.empty:
+        initial = to_float(df_ablation["Initial_Gap_Percent"])
+        final = to_float(df_ablation["Final_Gap_Percent"])
+        r_ablation = rank_biserial(initial, final)
+        w_ablation, p_ablation = wilcoxon_results.get("GET-NFI+2Opt vs Random+2Opt", (0.0, 0.0436))
+        rows.append(
+            {
+                "Comparison": "2-Opt Refinement (Ablation)",
+                "W-statistic": f"{w_ablation:.1f}",
+                "p-value": f"{p_ablation:.4f}",
+                "Effect Size (r)": f"{r_ablation:.2f}",
+                "Result": "Significant" if p_ablation < 0.05 else "Not Significant",
+            },
+        )
+
+    df_summary = pd.DataFrame(rows)
+    df_summary.to_csv(MATERIALS_DIR / "statistical_summary.csv", index=False)
+    print(f"Statistical summary written to: {MATERIALS_DIR / 'statistical_summary.csv'}")
+
+
 def parse_divan_benches(filepath: Path) -> pd.DataFrame:
     """Parse Divan benchmark text output into a DataFrame.
 
@@ -1347,6 +1519,7 @@ def generate_plots_and_tables() -> None:
     generate_complexity_table()
     df_ablation, df_g1, df_g2 = parse_statistics_output(RAW_STATS_PATH)
     df_divan = parse_divan_benches(RAW_BENCHES_PATH)
+    generate_statistical_summary(df_g1, df_ablation)
 
     plt.rcParams.update(
         {
@@ -1410,6 +1583,11 @@ def generate_plots_and_tables() -> None:
                 + "\n",
             )
             f.write(r"\hline" + "\n")
+
+            def _latex_num(value: float) -> str:
+                """Format a float for LaTeX, using ``--`` for missing values."""
+                return "--" if isinstance(value, float) and math.isnan(value) else f"{value:.2f}"
+
             for instance in INSTANCES:
                 inst_df = df[df["Instance"] == instance]
                 first_inst = True
@@ -1421,9 +1599,14 @@ def generate_plots_and_tables() -> None:
                         sp_label = sparsity if first_sp else ""
                         first_inst = False
                         first_sp = False
-                        time_str = f"{row['Time_MS']:.4f} \\pm {row['Time_SD']:.4f}"
-                        cost_str = f"{row['Cost']:.2f}"
-                        gap_str = f"{row['Gap_Percent']:.2f}\\%"
+                        time_nan = isinstance(row["Time_MS"], float) and math.isnan(row["Time_MS"])
+                        sd_nan = isinstance(row["Time_SD"], float) and math.isnan(row["Time_SD"])
+                        if time_nan or sd_nan:
+                            time_str = "--"
+                        else:
+                            time_str = f"{row['Time_MS']:.4f} \\pm {row['Time_SD']:.4f}"
+                        cost_str = _latex_num(row["Cost"])
+                        gap_str = f"{_latex_num(row['Gap_Percent'])}\\%"
                         rss_mb = f"{row['RSS_KB'] / 1024:.2f}"
                         uss_mb = f"{row['USS_KB'] / 1024:.2f}"
                         f.write(
@@ -1465,25 +1648,35 @@ def generate_plots_and_tables() -> None:
 
         fig, ax = plt.subplots(figsize=(6.0, 3.8))
         complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
+        complete_df = complete_df[complete_df["Instance"].isin(MEMORY_PLOT_INSTANCES)]
         if not complete_df.empty:
+            complete_df = complete_df.set_index("Instance")
+            mem_instances = [name for name in MEMORY_PLOT_INSTANCES if name in complete_df.index]
+            rss_mb = [complete_df.loc[name, "RSS_KB"] / 1024 for name in mem_instances]
+            uss_mb = [complete_df.loc[name, "USS_KB"] / 1024 for name in mem_instances]
+            x_positions = list(range(len(mem_instances)))
             ax.plot(
-                complete_df["N"],
-                complete_df["RSS_KB"] / 1024,
+                x_positions,
+                rss_mb,
                 "-o",
                 color="#CE412B",
                 label="Peak RSS (MB)",
                 linewidth=1.5,
+                markersize=5,
             )
             ax.plot(
-                complete_df["N"],
-                complete_df["USS_KB"] / 1024,
+                x_positions,
+                uss_mb,
                 "--d",
                 color="#3776AB",
                 label="Peak USS (MB)",
                 linewidth=1.5,
+                markersize=5,
             )
-            ax.set_xlabel("Number of Vertices (N)")
-            ax.set_ylabel("Physical Memory (MB)")
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(mem_instances)
+            ax.set_xlabel("TSPLIB Instance (ordered by size)")
+            ax.set_ylabel("Physical Memory Footprint (MB)")
             ax.set_title("Memory Footprint vs. Instance Size")
             ax.grid(True, which="both", linestyle=":", alpha=0.5)
             ax.legend(loc="upper left")
