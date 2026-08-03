@@ -1725,19 +1725,21 @@ def generate_plots_and_tables() -> None:
     df_divan = parse_divan_benches(RAW_BENCHES_PATH)
     generate_statistical_summary(df_g1, df_ablation)
 
-    plt.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Times New Roman", "DejaVu Serif", "Liberation Serif", "serif"],
-        "font.size": 9,
-        "axes.labelsize": 9.5,
-        "axes.titlesize": 10,
-        "xtick.labelsize": 8.5,
-        "ytick.labelsize": 8.5,
-        "legend.fontsize": 8.5,
-        "lines.markersize": 5,
-        "lines.linewidth": 1.5,
-        "figure.dpi": 300,
-    })
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "DejaVu Serif", "Liberation Serif", "serif"],
+            "font.size": 9,
+            "axes.labelsize": 9.5,
+            "axes.titlesize": 10,
+            "xtick.labelsize": 8.5,
+            "ytick.labelsize": 8.5,
+            "legend.fontsize": 8.5,
+            "lines.markersize": 5,
+            "lines.linewidth": 1.5,
+            "figure.dpi": 300,
+        }
+    )
 
     # --- Latency comparison plots from Divan data ---
     if not df_divan.empty:
