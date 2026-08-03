@@ -1158,7 +1158,7 @@ def run_advanced_analyses() -> None:
         cmap="Reds",
         marker="o",
         s=25,
-        edgecolor="k"
+        edgecolor="k",
     )
     cbar = plt.colorbar(scatter)
     cbar.set_label("Backtrack Limit")
