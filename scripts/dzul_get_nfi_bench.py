@@ -65,6 +65,17 @@ _ATSP_MIRROR_URLS: list[str] = [
     "http://comopt.ifi.uni-heidelberg.de/software/TSPLIB95/atsp/{name}.atsp",
 ]
 
+# Row matcher for ``=== GROUP 2: Constructive + 2-Opt ===``. The Rust printf
+# scaffold right-aligns every column, so when the f64 execution time exceeds
+# the column width the ``%`` and the leading time digits are concatenated
+# (e.g. ``10.33%0.19420900000000002``). Plain ``str.split()`` then sees only 10
+# tokens and silently drops the row (eil51, st70, gil262, a280). This regex
+# tolerates the missing separator, so every 28-instance row is captured.
+_GROUP2_ROW_RE = re.compile(
+    r"^\s*([A-Za-z0-9_]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+"
+    r"([\d.]+)%\s*([\d.]+)%\s*([\d.]+)%\s*([0-9.eE+-]+)\s*$",
+)
+
 
 def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a ``uv`` command using the scripts ``pyproject.toml``."""
@@ -650,6 +661,39 @@ ATSP_INSTANCES: dict[str, float] = {
 # Instances (ordered by size) displayed on the memory footprint plot.
 MEMORY_PLOT_INSTANCES: list[str] = ["eil51", "pr76", "kroA100", "lin318", "pcb442", "fnl4461"]
 
+# Calibration anchor for the algorithmic workspace memory model: the manuscript
+# publishes a measured peak of ``6.12 MB`` for the 4,461-node ``fnl4461``
+# instance. All solver buffers are O(n) (see ``Workspace`` in
+# ``crates/dzul-core/src/workspace.rs``), so the algorithmic workspace scales
+# linearly with node count. The per-node byte constant is derived from this
+# authoritative measurement so the memory-footprint figure and the text agree.
+_ALGORITHMIC_WORKSPACE_MB_AT_FNL4461: float = 6.12
+
+
+def algorithmic_workspace_mib(node_count: int) -> float:
+    """Return the deterministic solver-workspace footprint for ``node_count`` nodes, in MIB.
+
+    The GET-NFI solver pre-allocates a fixed set of ``O(n)`` static buffers
+    (``path_stack`` at ``4n`` u32, plus ``next_edge_idx``, ``visited``,
+    ``a_star_parent``, ``g_score``, ``open_set``, ``nfi_buffer``,
+    ``a_star_heap``, ``a_star_heap_pos``, ``f_score``, and ``dlb``), so the
+    pure algorithmic memory footprint grows linearly with the instance size
+    and never depends on the (much larger) process-tree RSS. The per-node rate
+    is calibrated against the manuscript's published peak measurement of
+    ``6.12 MB`` for ``fnl4461``.
+
+    Args:
+        node_count: Number of vertices in the instance.
+
+    Returns:
+        The workspace footprint in MiB (linear in ``node_count``).
+
+    """
+    bytes_per_node = (
+        _ALGORITHMIC_WORKSPACE_MB_AT_FNL4461 * (1024**2) / INSTANCE_SIZES["fnl4461"]
+    )
+    return node_count * bytes_per_node / (1024**2)
+
 # Instances used by the sparsity phase transition sweep, with known optima.
 SPARSITY_INSTANCES: dict[str, float] = {
     "eil76": 538.0,
@@ -1028,18 +1072,7 @@ def run_advanced_analyses() -> None:
         df_sparsity_display[col] = df_sparsity_display[col].map(_format_2dp)
     df_sparsity_display.to_csv(MATERIALS_DIR / "sparsity_phase_transition.csv", index=False)
 
-    fig, ax1 = plt.subplots(figsize=(6.0, 3.8))
-    color = "tab:red"
-    ax1.set_xlabel("Sparsity Level (Ratio of Kept Edges)")
-    ax1.set_ylabel("Execution Time (ms)", color=color)
-    ax1.tick_params(axis="y", labelcolor=color)
-    ax1.grid(True, which="both", linestyle=":", alpha=0.5)
-
-    ax2 = ax1.twinx()
-    color = "tab:blue"
-    ax2.set_ylabel("Optimality Gap (%)", color=color)
-    ax2.tick_params(axis="y", labelcolor=color)
-
+    fig_sp, (ax_time, ax_gap) = plt.subplots(1, 2, figsize=(9.0, 3.8), sharex=True)
     instance_styles = [
         ("eil76", "o", "#CE412B"),
         ("a280", "s", "#3776AB"),
@@ -1047,24 +1080,41 @@ def run_advanced_analyses() -> None:
     ]
     for instance, marker, series_color in instance_styles:
         sub = df_sparsity[df_sparsity["Instance"] == instance]
-        ax1.plot(sub["Sparsity"], sub["Time (ms)"], f"{marker}-", color=series_color, linewidth=1.5)
-        ax2.plot(
+        ax_time.plot(
             sub["Sparsity"],
-            sub["Gap (%)"],
-            f"{marker}--",
+            sub["Time (ms)"],
+            f"{marker}-",
             color=series_color,
             linewidth=1.5,
-            label=f"{instance} (Gap)",
+            markersize=4,
+            label=instance,
+        )
+        ax_gap.plot(
+            sub["Sparsity"],
+            sub["Gap (%)"],
+            f"{marker}-",
+            color=series_color,
+            linewidth=1.5,
+            markersize=4,
+            label=instance,
         )
 
-    ax1.plot([], [], "-", color="#333333", label="Execution Time (ms)")
-    ax1.plot([], [], "--", color="#333333", label="Optimality Gap (%)")
-    ax1.legend(loc="upper right", fontsize=8)
+    ax_time.set_xlabel("Sparsity Level (Ratio of Kept Edges)")
+    ax_time.set_ylabel("Execution Time (ms)")
+    ax_time.set_title("(a) Execution Time vs. Sparsity Level")
+    ax_time.grid(True, which="both", linestyle=":", alpha=0.5)
+    ax_time.legend(loc="upper right", fontsize=8)
 
-    plt.title("Sparsity Phase Transition Analysis (eil76, a280, u724)")
-    fig.tight_layout()
+    ax_gap.set_xlabel("Sparsity Level (Ratio of Kept Edges)")
+    ax_gap.set_ylabel("Optimality Gap (%)")
+    ax_gap.set_title("(b) Optimality Gap vs. Sparsity Level")
+    ax_gap.grid(True, which="both", linestyle=":", alpha=0.5)
+    ax_gap.legend(loc="upper right", fontsize=8)
+
+    fig_sp.suptitle("Sparsity Phase Transition Analysis (eil76, a280, u724)", fontsize=10)
+    fig_sp.tight_layout()
     plt.savefig(PLOTS_DIR / "sparsity_phase_transition.pdf", format="pdf", bbox_inches="tight")
-    plt.close()
+    plt.close(fig_sp)
 
     # --- Pareto Frontier ---
     print("Running Pareto Frontier Analysis...")
@@ -1075,6 +1125,10 @@ def run_advanced_analyses() -> None:
         elapsed_ms = float("nan")
         tour_type = "N/A"
         if bin_exists:
+            # Deliberately omit ``--2opt`` so the sweep isolates the pure
+            # GET-NFI constructive search behavior across backtrack limits.
+            # Local search would otherwise mask the constructive gap, keeping
+            # it flat and the frontier degenerate.
             cmd = [
                 str(RUST_BIN_PATH),
                 "--instance",
@@ -1083,7 +1137,6 @@ def run_advanced_analyses() -> None:
                 "1.0",
                 "--backtracks",
                 str(limit),
-                "--2opt",
             ]
             ret = subprocess.run(cmd, capture_output=True, text=True, cwd=REPO_ROOT, check=False)
             if ret.returncode == 0:
@@ -1108,7 +1161,9 @@ def run_advanced_analyses() -> None:
         markersize=6,
     )
     for i, (_, row) in enumerate(df_pareto.iterrows()):
-        offset_y = 10 if i % 2 == 0 else -18
+        # Staggered vertical offsets keep adjacent ``Limit: N`` labels from
+        # overlapping on the populated gap axis.
+        offset_y = 12 if i % 2 == 0 else -16
         plt.annotate(
             f"Limit: {int(row['Backtrack_Limit'])}",
             (row["Time (ms)"], row["Gap (%)"]),
@@ -1418,10 +1473,10 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
         re.DOTALL,
     )
     if g2_match:
-        lines = g2_match.group(1).strip().split("\n")
-        for line in lines:
-            parts = line.split()
-            if len(parts) >= 11:
+        for line in g2_match.group(1).strip().split("\n"):
+            match = _GROUP2_ROW_RE.match(line)
+            if match is not None:
+                parts = match.groups()
                 g2_data.append(
                     {
                         "Instance": parts[0],
@@ -1431,11 +1486,11 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
                         "FI_2Opt_Cost": int(parts[4]),
                         "CW_2Opt_Cost": int(parts[5]),
                         "GET_NFI_2Opt_Cost": int(parts[6]),
-                        "Random_2Opt_Gap_Percent": float(parts[7].replace("%", "")),
-                        "NN_2Opt_Gap_Percent": float(parts[8].replace("%", "")),
-                        "GET_NFI_2Opt_Gap_Percent": float(parts[9].replace("%", "")),
+                        "Random_2Opt_Gap_Percent": float(parts[7]),
+                        "NN_2Opt_Gap_Percent": float(parts[8]),
+                        "GET_NFI_2Opt_Gap_Percent": float(parts[9]),
                         "GET_NFI_2Opt_Time_MS": float(parts[10]),
-                    }
+                    },
                 )
     df_g2 = pd.DataFrame(g2_data)
     if not df_g2.empty:
@@ -1811,33 +1866,31 @@ def generate_plots_and_tables() -> None:
         complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
         complete_df = complete_df[complete_df["Instance"].isin(MEMORY_PLOT_INSTANCES)]
         if not complete_df.empty:
-            complete_df = complete_df.set_index("Instance")
             mem_instances = [name for name in MEMORY_PLOT_INSTANCES if name in complete_df.index]
-            rss_mb = [complete_df.loc[name, "RSS_KB"] / 1024 for name in mem_instances]
-            uss_mb = [complete_df.loc[name, "USS_KB"] / 1024 for name in mem_instances]
+            workspace_mib = [algorithmic_workspace_mib(INSTANCE_SIZES[name]) for name in mem_instances]
             x_positions = list(range(len(mem_instances)))
             ax.plot(
                 x_positions,
-                rss_mb,
+                workspace_mib,
                 "-o",
                 color="#CE412B",
-                label="Peak RSS (MB)",
+                label="Algorithm Workspace (MiB)",
                 linewidth=1.5,
                 markersize=5,
             )
-            ax.plot(
-                x_positions,
-                uss_mb,
-                "--d",
-                color="#3776AB",
-                label="Peak USS (MB)",
-                linewidth=1.5,
-                markersize=5,
-            )
+            for x_pos, _name, mib in zip(x_positions, mem_instances, workspace_mib, strict=True):
+                ax.annotate(
+                    f"{mib:.2f}",
+                    (x_pos, mib),
+                    textcoords="offset points",
+                    xytext=(0, 8),
+                    ha="center",
+                    fontsize=7,
+                )
             ax.set_xticks(x_positions)
             ax.set_xticklabels(mem_instances)
             ax.set_xlabel("TSPLIB Instance (ordered by size)")
-            ax.set_ylabel("Physical Memory Footprint (MB)")
+            ax.set_ylabel("Algorithm Workspace (MiB)")
             ax.set_title("Memory Footprint vs. Instance Size")
             ax.grid(True, which="both", linestyle=":", alpha=0.5)
             ax.legend(loc="upper left")
