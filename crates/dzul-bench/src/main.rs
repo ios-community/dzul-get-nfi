@@ -1,4 +1,4 @@
-//! CLI Benchmark Runner for Dzul's GET-NFI TSP Solver.
+//! CLI Benchmark Runner for GET-NFI TSP Solver.
 
 #![allow(
     clippy::cast_possible_truncation,

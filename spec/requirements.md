@@ -1,4 +1,4 @@
-# Requirements Specification: Dzul's GET-NFI TSP Solver
+# Requirements Specification: GET-NFI TSP Solver
 
 **Role:** Architect Engineer → Senior Software Engineer
 **Status:** Frozen | **MSRV:** Rust 1.96.0 | **Edition:** 2024
@@ -6,7 +6,7 @@
 
 ## Architect Directives
 
-- **Primary Objective:** Implement Dzul's GET-NFI heuristic algorithm to solve the TSP on complete/incomplete and directed/undirected graphs with zero heap allocations during execution and full `no_std` compatibility.
+- **Primary Objective:** Implement GET-NFI heuristic algorithm to solve the TSP on complete/incomplete and directed/undirected graphs with zero heap allocations during execution and full `no_std` compatibility.
 - **Crate Type:** Library (`lib`) with optional `std` support.
 - **Memory Safety:** `#![deny(unsafe_code)]` enforced globally. No `unsafe` blocks permitted.
 
@@ -50,3 +50,7 @@ To prevent documentation drift, the test suite contains a structural test (`test
    - A code comment containing `// Anchor: ID` exists.
    - A test function containing `test_id_` or matching the verification anchor path exists.
 3. Fails the build if any requirement is missing its corresponding code anchor or test.
+
+
+
+

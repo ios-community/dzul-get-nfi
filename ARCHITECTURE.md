@@ -1,6 +1,6 @@
-# Architecture & Design Specification: Dzul's GET-NFI
+# Architecture & Design Specification: GET-NFI
 
-This document describes the high-level architecture and design decisions behind Dzul's GET-NFI TSP Solver.
+This document describes the high-level architecture and design decisions behind GET-NFI TSP Solver.
 
 ## Module Overview
 
@@ -79,3 +79,6 @@ The core solver runs synchronously on a single thread to avoid multi-threading o
 
 ### Error Handling
 All fallible operations return a `Result<T, TspError>`. Performance-critical internal functions use `debug_assert!` or standard assertions to verify array boundaries, avoiding runtime overhead in release builds while maintaining safety.
+
+
+

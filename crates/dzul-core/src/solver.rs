@@ -1,4 +1,4 @@
-//! Core execution logic for Dzul's GET-NFI TSP solver.
+//! Core execution logic for GET-NFI TSP solver.
 //!
 //! # TSP Taxonomy
 //!
@@ -12,7 +12,7 @@
 //!
 //! # Paper Title
 //!
-//! "A Zero-Allocation Dzul's GET-NFI Constructive Heuristic with Candidate-Set
+//! "A Zero-Allocation GET-NFI Constructive Heuristic with Candidate-Set
 //! 2-Opt for the Travelling Salesperson Problem"
 
 use crate::error::TspError;
@@ -206,7 +206,7 @@ pub fn calculate_nfi(graph: &Graph<'_>, workspace: &mut Workspace<'_>) -> Result
     Ok(())
 }
 
-/// Solves the TSP on the given graph using Dzul's GET-NFI algorithm.
+/// Solves the TSP on the given graph using GET-NFI algorithm.
 ///
 /// This entry point operates on a mutable graph: it performs the one-time
 /// GET-NFI pre-processing (threshold calculation, NFI computation, and in-place
@@ -615,6 +615,7 @@ fn get_edge_weight(graph: &Graph<'_>, u: u32, v: u32) -> Option<Weight> {
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss
 )]
+/// Performs 2-Opt local search. On directed ATSP graphs, subpath reversal flips edge directions; full path cost recomputed to ensure validity.
 pub fn two_opt(
     graph: &Graph<'_>,
     path: &mut [u32],

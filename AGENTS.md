@@ -1,6 +1,6 @@
 # AGENTS.md — AI Developer Guide for `dzul-get-nfi`
 
-High-performance TSP solver: **Dzul's GET-NFI** constructive heuristic + candidate-set 2-Opt local search. Rust workspace + Python benchmarking utilities.
+High-performance TSP solver: **GET-NFI** constructive heuristic + candidate-set 2-Opt local search. Rust workspace + Python benchmarking utilities.
 
 ## Crate architecture
 
@@ -50,7 +50,7 @@ cargo miri test
 ```bash
 uv run ruff check scripts/
 uv run ruff format --check scripts/
-python scripts/dzul_get_nfi_bench.py
+python scripts/get_nfi_bench.py
 ```
 
 Python in `scripts/` is managed by `uv`, linted by `ruff` with `select = ["ALL"]` (see `scripts/pyproject.toml` for ignores).
@@ -63,3 +63,6 @@ Python in `scripts/` is managed by `uv`, linted by `ruff` with `select = ["ALL"]
 - **Logarithmic builds**: `.cargo/config.toml` forces `rust-lld` linker on all x86_64 targets. Do not remove.
 - **Stack buffers**: Workspace uses `PATH_STACK_MULTIPLIER = 4` for path_stack sizing. All solver buffers are caller-provided slices (zero allocs).
 - **Commit style**: conventional commits (`feat:`, `fix:`, `perf:`, `refactor:`, etc.).
+
+
+

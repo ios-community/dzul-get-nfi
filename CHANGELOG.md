@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-07-06
 
 ### Added
-- Initial release of Dzul's GET-NFI TSP Solver.
+- Initial release of GET-NFI TSP Solver.
 - Implementation of Second-Order Node Friendliness Index (NFI) preprocessing.
 - Implementation of Candidate-Set-constrained 2-Opt with Don't Look Bits (DLB).
 - Implementation of $O(E \log V)$ Indexed Binary Heap for A* fallback.
@@ -17,3 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive unit tests, integration tests, and performance benchmarks using `criterion`.
 - Zero-allocation verification tests using a custom tracking allocator.
 - Living documentation verification tests to prevent anchor drift.
+
+
+

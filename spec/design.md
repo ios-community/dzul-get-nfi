@@ -1,4 +1,4 @@
-# Architecture & Design Specification: Dzul's GET-NFI
+# Architecture & Design Specification: GET-NFI
 
 **Role:** Architect Directive → Senior Engineer Blueprint
 **Revision:** 1.3.0 | **Toolchain:** Rust 1.96.0+ (Edition 2024)
@@ -85,3 +85,7 @@ fn static_bypass(graph: &Graph<'_>) -> bool {
 ```
 The automated living documentation test (`tests/living_doc.rs`) will scan for these exact doc attributes and comments.
 ```
+
+
+
+

@@ -1,4 +1,4 @@
-//! Performance benchmarks for Dzul's GET-NFI TSP solver (Divan).
+//! Performance benchmarks for GET-NFI TSP solver (Divan).
 
 #![allow(
     clippy::cast_possible_truncation,

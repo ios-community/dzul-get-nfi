@@ -1,7 +1,7 @@
 [project]
 name = "dzul-get-nfi-bench"
 version = "0.1.0"
-description = "Benchmarking scripts for Dzul's GET-NFI TSP solver"
+description = "Benchmarking scripts for GET-NFI TSP solver"
 requires-python = ">=3.10"
 dependencies = [
     "psutil",
@@ -54,3 +54,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**" = ["ANN"]
 "*.ipynb" = ["E402", "S605"]
+
+
+

@@ -1,8 +1,8 @@
-# Dzul's GET-NFI TSP Solver
+# GET-NFI TSP Solver
 
-> **A Zero-Allocation Dzul's GET-NFI Constructive Heuristic with Candidate-Set 2-Opt for the Travelling Salesperson Problem**
+> **A Zero-Allocation GET-NFI Constructive Heuristic with Candidate-Set 2-Opt for the Travelling Salesperson Problem**
 
-A zero-allocation, `no_std` compatible Travelling Salesperson Problem (TSP) solver written from scratch in Rust, featuring Dzul's GET-NFI heuristic algorithm.
+A zero-allocation, `no_std` compatible Travelling Salesperson Problem (TSP) solver written from scratch in Rust, featuring GET-NFI heuristic algorithm.
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.96.0%2B-orange.svg)](https://github.com)
@@ -186,3 +186,6 @@ cargo build --release --no-default-features --target thumbv7m-none-eabi
 ## License
 
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+
+

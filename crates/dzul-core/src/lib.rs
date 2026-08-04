@@ -1,7 +1,7 @@
-//! Dzul's GET-NFI TSP Solver.
+//! GET-NFI TSP Solver.
 //!
 //! This crate provides a zero-allocation, `no_std` compatible implementation
-//! of Dzul's GET-NFI heuristic algorithm for solving the Travelling Salesperson Problem.
+//! of GET-NFI heuristic algorithm for solving the Travelling Salesperson Problem.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]

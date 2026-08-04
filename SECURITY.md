@@ -33,3 +33,6 @@ We will investigate the issue and determine its severity.
 We will develop a patch to address the vulnerability.
 4. **Disclosure** \
 We will coordinate a public disclosure date with you to ensure users have time to update before details are made public.
+
+
+

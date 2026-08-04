@@ -75,3 +75,6 @@ cargo bench
 ```
 
 This will execute the benchmarks defined in `benches/solver_benches.rs` and generate detailed HTML reports under `target/criterion/report/index.html`.
+
+
+

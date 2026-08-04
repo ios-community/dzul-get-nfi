@@ -1,4 +1,4 @@
-# Task Breakdown & Traceability: Dzul's GET-NFI
+# Task Breakdown & Traceability: GET-NFI
 
 **Role:** Architect Oversight → Senior Engineer Execution  
 **Methodology:** Spec-Driven Development (SDD) with Living Doc Verification
@@ -65,3 +65,7 @@
 - **Zero-Allocation Enforcement:** The test `test_nfr_01_zero_alloc` must wrap the solver execution in a custom allocator that tracks active allocations. If the allocation count is greater than zero during `solve`, the test must fail.
 - **Living Doc Enforcement:** The test `test_living_doc` must parse `requirements.md` and scan the codebase. If any `FR-XX` or `NFR-XX` anchor is missing from the code comments or test names, the build must fail.
 - **Regression Threshold:** Any pull request that increases the average execution time of the `criterion` benchmark group by more than 5% compared to the `stable` baseline must be rejected and profiled.
+
+
+
+
