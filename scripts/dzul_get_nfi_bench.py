@@ -1856,6 +1856,7 @@ def generate_plots_and_tables() -> None:
         fig, ax = plt.subplots(figsize=(6.0, 3.8))
         complete_df = df[(df["Sparsity"] == "Complete") & (df["Algorithm"] == "GET-NFI")]
         complete_df = complete_df[complete_df["Instance"].isin(MEMORY_PLOT_INSTANCES)]
+        complete_df = complete_df.set_index("Instance")
         if not complete_df.empty:
             mem_instances = [name for name in MEMORY_PLOT_INSTANCES if name in complete_df.index]
             workspace_mib = [algorithmic_workspace_mib(INSTANCE_SIZES[name]) for name in mem_instances]
