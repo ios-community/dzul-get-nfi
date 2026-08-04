@@ -23,8 +23,12 @@ import urllib.request
 
 import zipfile
 import pandas as pd
+
+
 class MemoryProfilingError(RuntimeError):
     """Raised when binary missing and memory profiling required."""
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MATERIALS_DIR = REPO_ROOT / "scripts" / "materials"
@@ -71,6 +75,8 @@ _GROUP2_ROW_RE = re.compile(
     r"^\s*([A-Za-z0-9_]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+"
     r"([\d.]+)%\s*([\d.]+)%\s*([\d.]+)%\s*([0-9.eE+-]+)\s*$",
 )
+
+
 def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a ``uv`` command using the scripts ``pyproject.toml``."""
     return subprocess.run(
@@ -80,6 +86,8 @@ def _run_uv(args: list[str], *, check: bool = True) -> subprocess.CompletedProce
         capture_output=True,
         text=True,
     )
+
+
 def _get_cpu_vendor() -> str:
     """Detect the CPU vendor (``intel``, ``amd``, ``arm``, or ``unknown``)."""
     system = platform.system()
@@ -113,6 +121,8 @@ def _get_cpu_vendor() -> str:
     except Exception:  # noqa: BLE001
         pass
     return vendor
+
+
 def _get_cpu_pinning_prefix() -> str:
     """Return a shell-command prefix that pins execution to a single CPU core.
 
@@ -133,9 +143,13 @@ def _get_cpu_pinning_prefix() -> str:
         if shutil.which("taskset") is not None:
             return "taskset -c 0 "
     return ""
+
+
 def _is_noise_line(line: str) -> bool:
     """Return ``True`` if the line is cargo build noise that should be filtered."""
     return any(re.search(p, line) for p in _CARGO_NOISE_PATTERNS)
+
+
 def _run_cargo_with_memory(
     cmd: str,
     *,
@@ -245,6 +259,8 @@ def _run_cargo_with_memory(
     return_code = process.wait()
 
     return "".join(filtered_lines), return_code, peak_rss / (1024**2), peak_uss / (1024**2)
+
+
 def get_criterion_estimates(benchmark_id: str) -> tuple[float | None, float | None]:
     """Extract the mean and standard deviation from a Criterion ``estimates.json``.
 
@@ -284,6 +300,8 @@ def get_criterion_estimates(benchmark_id: str) -> tuple[float | None, float | No
                 pass
 
     return None, None
+
+
 def setup_environment() -> None:
     """Verify the project structure and install Python dependencies via ``uv``.
 
@@ -317,6 +335,8 @@ def setup_environment() -> None:
         _run_uv(["pip", "install", "-q", "-e", "."], check=False)
 
     print("Environment setup verified.")
+
+
 def lint_script() -> None:
     """Run ``ruff check`` and ``ruff format --check`` on this script.
 
@@ -359,6 +379,8 @@ def lint_script() -> None:
         print(f"Ruff format check failed:\n{result.stdout}\n{result.stderr}")
         raise SystemExit(1)
     print("Ruff format check passed.")
+
+
 def _collect_hardware_specs() -> dict[str, str]:
     """Collect hardware specifications into a dictionary.
 
@@ -421,6 +443,8 @@ def _collect_hardware_specs() -> dict[str, str]:
         specs["CPU Pinning"] = "None"
 
     return specs
+
+
 def _format_hardware_specs(specs: dict[str, str]) -> tuple[str, str]:
     """Format hardware specs into a console report and a paper-ready paragraph."""
     report = (
@@ -443,6 +467,8 @@ def _format_hardware_specs(specs: dict[str, str]) -> tuple[str, str]:
     )
 
     return report, paragraph
+
+
 def profile_hardware() -> None:
     """Print a hardware specification report and save it to ``HARDWARE_SPECS_PATH``.
 
@@ -472,6 +498,8 @@ def profile_hardware() -> None:
     )
     HARDWARE_SPECS_PATH.write_text(markdown)
     print(f"Hardware specs saved to: {HARDWARE_SPECS_PATH}")
+
+
 def run_statistics_suite() -> None:
     """Run the statistical benchmark suite via ``cargo test --test statistics``.
 
@@ -494,6 +522,8 @@ def run_statistics_suite() -> None:
     else:
         msg = f"cargo test exited with code {ret}. Check {RAW_STATS_PATH} for details."
         raise RuntimeError(msg)
+
+
 def run_bench_suite() -> None:
     """Run the Divan microbenchmark suite via ``cargo bench --bench solver_benches``.
 
@@ -516,6 +546,8 @@ def run_bench_suite() -> None:
     else:
         msg = f"cargo bench exited with code {ret}. Check {RAW_BENCHES_PATH} for details."
         raise RuntimeError(msg)
+
+
 def compile_rust_binary() -> None:
     """Compile the Rust benchmark binary with aggressive optimisations.
 
@@ -563,6 +595,8 @@ def compile_rust_binary() -> None:
 
     shutil.copy(src_bin, RUST_BIN_PATH)
     print(f"Compilation successful. Binary copied to: {RUST_BIN_PATH}")
+
+
 def parse_benchmark_output(stdout: str) -> tuple[float, float, str]:
     """Parse the solver binary's stdout for elapsed time, cost, and tour type.
 
@@ -588,6 +622,8 @@ def parse_benchmark_output(stdout: str) -> tuple[float, float, str]:
         elif line.startswith("TOUR_TYPE:"):
             tour_type = line.split(":")[1].strip()
     return elapsed_ms, cost, tour_type
+
+
 INSTANCES: dict[str, float] = {
     "eil51": 426.0,
     "pr76": 108_159.0,
@@ -632,6 +668,8 @@ MEMORY_PLOT_INSTANCES: list[str] = ["eil51", "pr76", "kroA100", "lin318", "pcb44
 # linearly with node count. The per-node byte constant is derived from this
 # authoritative measurement so the memory-footprint figure and the text agree.
 _ALGORITHMIC_WORKSPACE_MB_AT_FNL4461: float = 6.12
+
+
 def algorithmic_workspace_mib(node_count: int) -> float:
     """Return the deterministic solver-workspace footprint for ``node_count`` nodes, in MIB.
 
@@ -653,6 +691,8 @@ def algorithmic_workspace_mib(node_count: int) -> float:
     """
     bytes_per_node = _ALGORITHMIC_WORKSPACE_MB_AT_FNL4461 * (1024**2) / INSTANCE_SIZES["fnl4461"]
     return node_count * bytes_per_node / (1024**2)
+
+
 # Instances used by the sparsity phase transition sweep, with known optima.
 SPARSITY_INSTANCES: dict[str, float] = {
     "eil76": 538.0,
@@ -660,6 +700,8 @@ SPARSITY_INSTANCES: dict[str, float] = {
     "u724": 41_910.0,
 }
 """Mapping of sparsity sweep instance names to their known optimal tour costs."""
+
+
 def run_main_experiments() -> None:
     """Run the full experiment matrix: instances x sparsity x 2-Opt.
 
@@ -808,6 +850,8 @@ def run_main_experiments() -> None:
         raise MemoryProfilingError
     df.to_csv(CSV_RESULTS_PATH, index=False)
     print("Main experiment matrix complete. Results saved.")
+
+
 # Node counts of the ATSP instances, mirroring the Rust dataset loader
 # (``instance_node_count`` in ``crates/dzul-bench/src/dataset.rs``). Used to
 # validate that downloaded matrices are complete before the solver runs.
@@ -820,6 +864,8 @@ _ATSP_INSTANCE_SIZES: dict[str, int] = {
     "kro124p": 100,
     "ftv170": 171,
 }
+
+
 def _atsp_text_is_valid(text: str, expected_n: int) -> bool:
     """Return ``True`` when ``text`` holds a complete TSPLIB FULL_MATRIX.
 
@@ -859,6 +905,8 @@ def _atsp_text_is_valid(text: str, expected_n: int) -> bool:
                     return False
                 token_count += 1
     return dimension == expected_n and token_count >= expected_n * expected_n
+
+
 def _atsp_content_is_valid(content: bytes, expected_n: int) -> bool:
     """Return ``True`` when ``content`` holds a complete TSPLIB FULL_MATRIX.
 
@@ -871,6 +919,8 @@ def _atsp_content_is_valid(content: bytes, expected_n: int) -> bool:
 
     """
     return _atsp_text_is_valid(content.decode("utf-8", errors="replace"), expected_n)
+
+
 def _atsp_matrix_is_valid(path: Path, expected_n: int) -> bool:
     """Return ``True`` when ``path`` holds a complete TSPLIB FULL_MATRIX.
 
@@ -889,6 +939,8 @@ def _atsp_matrix_is_valid(path: Path, expected_n: int) -> bool:
     except OSError:
         text = ""
     return _atsp_text_is_valid(text, expected_n)
+
+
 def _ensure_atsp_datasets() -> None:
     """Ensure every ATSP weight matrix is present and valid in ``datasets/``.
 
@@ -938,6 +990,8 @@ def _ensure_atsp_datasets() -> None:
                 "ATSP analysis requires the TSPLIB matrices; check network access."
             )
             raise RuntimeError(msg)
+
+
 def run_advanced_analyses() -> None:
     """Run sparsity phase transition, Pareto frontier, and ATSP analyses.
 
@@ -1178,6 +1232,8 @@ def run_advanced_analyses() -> None:
         df_atsp[col] = df_atsp[col].map(_format_2dp)
     df_atsp.to_csv(MATERIALS_DIR / "atsp_comparison.csv", index=False)
     print("Advanced analyses complete.")
+
+
 def run_statistical_analysis() -> None:
     """Perform Wilcoxon signed-rank tests on the benchmark results.
 
@@ -1267,6 +1323,8 @@ def run_statistical_analysis() -> None:
     else:
         print("   Error: Sample sizes do not match for Complete vs Incomplete gaps.")
     print("=" * 65)
+
+
 def parse_time_to_ms(time_str: str, unit_str: str) -> float:
     """Convert a numeric time string with a unit suffix to milliseconds.
 
@@ -1287,11 +1345,15 @@ def parse_time_to_ms(time_str: str, unit_str: str) -> float:
     if unit == "s":
         return val * 1000.0
     return val
+
+
 def _format_2dp(value: float) -> float | str:
     """Format a float to two decimal places, preserving NaN for blank CSV cells."""
     if isinstance(value, float) and math.isnan(value):
         return value
     return f"{value:.2f}"
+
+
 def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Parse Divan statistics text output into DataFrames for ablation and group results.
 
@@ -1452,6 +1514,8 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
         df_g2_gaps.to_csv(MATERIALS_DIR / "twoopt_gaps.csv", index=False)
 
     return df_ablation, df_g1, df_g2
+
+
 def parse_wilcoxon_summary(filepath: Path) -> dict[str, tuple[float, float]]:
     """Parse ``W`` / ``p`` pairs from the Rust statistics suite output.
 
@@ -1476,6 +1540,8 @@ def parse_wilcoxon_summary(filepath: Path) -> dict[str, tuple[float, float]]:
             if match:
                 result[match.group(1)] = (float(match.group(2)), float(match.group(3)))
     return result
+
+
 def generate_statistical_summary(df_g1: pd.DataFrame, df_ablation: pd.DataFrame) -> None:
     """Write the formal Wilcoxon statistical summary table to ``MATERIALS_DIR``.
 
@@ -1568,6 +1634,8 @@ def generate_statistical_summary(df_g1: pd.DataFrame, df_ablation: pd.DataFrame)
     df_summary = pd.DataFrame(rows)
     df_summary.to_csv(MATERIALS_DIR / "statistical_summary.csv", index=False)
     print(f"Statistical summary written to: {MATERIALS_DIR / 'statistical_summary.csv'}")
+
+
 def parse_divan_benches(filepath: Path) -> pd.DataFrame:
     """Parse Divan benchmark text output into a DataFrame.
 
@@ -1625,6 +1693,8 @@ def parse_divan_benches(filepath: Path) -> pd.DataFrame:
     if not df_divan.empty:
         df_divan.to_csv(MATERIALS_DIR / "divan_microbenchmarks.csv", index=False)
     return df_divan
+
+
 def generate_plots_and_tables() -> None:
     """Generate LaTeX tables and publication-quality figures from parsed results.
 
@@ -1917,6 +1987,8 @@ def generate_plots_and_tables() -> None:
             plt.close()
 
     print("Plots generated successfully in scripts/plots/.")
+
+
 def _run_solver_for_param(  # noqa: PLR0913
     param_name: str,
     param_value: float,
@@ -1970,6 +2042,8 @@ def _run_solver_for_param(  # noqa: PLR0913
     if cost <= 0.0:
         return float("nan"), float("nan"), "Disconnected"
     return elapsed_ms, cost, tour_type
+
+
 _COMPLEXITY_COMPARISON_CSV: str = (
     "Solver Category,Time Complexity,Space Complexity,Dynamic Alloc.,no_std Ready\n"
     "Concorde (Exact),$O(2^n n^2)$,Exponential,Heavy Heap,No\n"
@@ -1984,6 +2058,8 @@ the documented guarantees in ``crates/dzul-core`` (bounded polynomial search,
 zero heap allocation). Cells use Typst math markup; ``paper/main.typ`` renders
 them via ``eval``.
 """
+
+
 def generate_complexity_table() -> None:
     """Write the complexity comparison table to ``MATERIALS_DIR``.
 
@@ -1997,6 +2073,8 @@ def generate_complexity_table() -> None:
     dst = MATERIALS_DIR / "complexity_comparison.csv"
     dst.write_text(_COMPLEXITY_COMPARISON_CSV, encoding="utf-8")
     print(f"Complexity comparison table written to: {dst}")
+
+
 def publish_to_paper() -> None:
     """Copy exported materials and plots into the sibling ``paper/`` directory.
 
@@ -2023,6 +2101,8 @@ def publish_to_paper() -> None:
             if file.is_file():
                 shutil.copy2(file, dst / file.relative_to(src))
     print(f"Published benchmark artifacts to {PAPER_DIR}")
+
+
 def package_and_download() -> None:
     """Package generated materials and plots into a zip archive.
 
@@ -2058,6 +2138,8 @@ def package_and_download() -> None:
     print(f"  Materials: {MATERIALS_DIR}")
     print(f"  Plots:     {PLOTS_DIR}")
     print(f"  Zip archive: {zip_path}")
+
+
 def main() -> None:
     """Run the authoritative benchmark pipeline.
 
@@ -2108,6 +2190,7 @@ def main() -> None:
     generate_plots_and_tables()
     publish_to_paper()
     package_and_download()
+
 
 if __name__ == "__main__":
     main()
