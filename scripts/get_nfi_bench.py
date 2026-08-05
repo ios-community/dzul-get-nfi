@@ -21,7 +21,7 @@ import sys
 import time
 import urllib.request
 
-import zipfile
+
 import pandas as pd
 
 
@@ -1780,51 +1780,20 @@ def generate_plots_and_tables() -> None:
         # add vertex count for numeric X-axis
         df["N"] = df["Instance"].map(INSTANCE_SIZES)
 
-        # latex_path = MATERIALS_DIR / "get_nfi_benchmark_table.tex"
-        # with latex_path.open("w") as f:
-            # f.write(r"\begin{table*}[htbp]" + "\n")
-            # f.write(r"\caption{Performance, Accuracy, and Memory Footprint of GET-NFI Solver}" + "\n")
-            # f.write(r"\label{tab:get_nfi_results}" + "\n")
-            # f.write(r"\centering" + "\n")
-            # f.write(r"\begin{tabular}{ccc|cc|c|cc}" + "\n")
-            # f.write(r"\hline" + "\n")
-            # f.write(
-                 # r"Instance & Graph Type & Algorithm & Execution Time (ms) & Cost & Gap (\%) & Peak RSS (MB) & Peak USS (MB) \\"
-                  # + "\n",
-             # )
-            # f.write(r"\hline" + "\n")
+        # LaTeX table generation disabled
 
         def _latex_num(value: float) -> str:
-                """Format a float for LaTeX, using ``--`` for missing values."""
-                return "--" if isinstance(value, float) and math.isnan(value) else f"{value:.2f}"
+            """Format a float for LaTeX, using ``--`` for missing values."""
+            return "--" if isinstance(value, float) and math.isnan(value) else f"{value:.2f}"
 
         for instance in INSTANCES:
-                inst_df = df[df["Instance"] == instance]
-                first_inst = True
-                for sparsity in ["Complete", "Incomplete (50%)"]:
-                    sp_df = inst_df[inst_df["Sparsity"] == sparsity]
-                    first_sp = True
-                    for _, row in sp_df.iterrows():
-                        inst_label = instance if (first_inst and first_sp) else ""
-                        sp_label = sparsity if first_sp else ""
-                        first_inst = False
-                        first_sp = False
-                        time_nan = isinstance(row["Time_MS"], float) and math.isnan(row["Time_MS"])
-                        sd_nan = isinstance(row["Time_SD"], float) and math.isnan(row["Time_SD"])
-                        if time_nan or sd_nan:
-                            time_str = "--"
-                        else:
-                            time_str = f"{row['Time_MS']:.4f} \\pm {row['Time_SD']:.4f}"
-                        cost_str = _latex_num(row["Cost"])
-                        gap_str = f"{_latex_num(row['Gap_Percent'])}\\%"
-                        rss_mb = f"{row['RSS_KB'] / 1024:.2f}"
-                        uss_mb = f"{row['USS_KB'] / 1024:.2f}"
-                        # f.write(
-                            # f" {inst_label} & {sp_label} & {row['Algorithm']} & {time_str} & {cost_str} & {gap_str} & {rss_mb} & {uss_mb} \\\\\n",
-             # )
-                # f.write(r"\hline" + "\n")
-            # f.write(r"\end{tabular}" + "\n")
-            # f.write(r"\end{table*}" + "\n")
+            inst_df = df[df["Instance"] == instance]
+            # first_inst removed
+            for sparsity in ["Complete", "Incomplete (50%)"]:
+                sp_df = inst_df[inst_df["Sparsity"] == sparsity]
+                # first_sp removed
+        # LaTeX table generation disabled
+        #
 
         fig, axes = plt.subplots(1, 2, figsize=(10.0, 3.8), sharey=True)
         colors = {"GET-NFI": "#CE412B", "2-Opt": "#3776AB"}
@@ -1861,61 +1830,63 @@ def generate_plots_and_tables() -> None:
         complete_df = complete_df[complete_df["Instance"].isin(MEMORY_PLOT_INSTANCES)]
         complete_df = complete_df.set_index("Instance")
         if not complete_df.empty:
-             mem_instances = [name for name in MEMORY_PLOT_INSTANCES if name in complete_df.index]
-             workspace_mib = [algorithmic_workspace_mib(INSTANCE_SIZES[name]) for name in mem_instances]
-             # Graph storage approx 8 bytes per edge (CSR)
-             edge_bytes = 8
-             graph_storage_mib = [ (INSTANCE_SIZES[name] * (INSTANCE_SIZES[name] - 1) * edge_bytes) / (1024**2) for name in mem_instances]
-             x_positions = list(range(len(mem_instances)))
-             ax.plot(
-                 x_positions,
-                 workspace_mib,
-                 "-o",
-                 color="#CE412B",
-                 label="Algorithm Workspace (MiB)",
-                 linewidth=1.5,
-                 markersize=5,
-             )
-             ax.plot(
-                 x_positions,
-                 graph_storage_mib,
-                 "-s",
-                 color="#3776AB",
-                 label="Graph Storage (MiB)",
-                 linewidth=1.5,
-                 markersize=5,
-             )
-             for x_pos, mib in zip(x_positions, workspace_mib):
-                 ax.annotate(
-                     f"{mib:.2f}",
-                     (x_pos, mib),
-                     textcoords="offset points",
-                     xytext=(0, 5),
-                     ha="center",
-                     fontsize=7,
-                 )
-             for x_pos, mib in zip(x_positions, graph_storage_mib):
-                 ax.annotate(
-                     f"{mib:.2f}",
-                     (x_pos, mib),
-                     textcoords="offset points",
-                     xytext=(0, 5),
-                     ha="center",
-                     fontsize=7,
-                 )
-             ax.set_xticks(x_positions)
-             ax.set_xticklabels(mem_instances)
-             ax.set_xlabel("TSPLIB Instance (ordered by size)")
-             ax.set_ylabel("Memory (MiB)")
-             ax.set_title("Memory Footprint vs. Instance Size")
-             ax.grid(True, which="both", linestyle=":", alpha=0.5)
-             ax.legend(loc="upper left")
-             # dynamic top padding
-             max_val = max(max(workspace_mib, default=0), max(graph_storage_mib, default=0))
-             ax.set_ylim(bottom=0, top=max_val * 1.30)
-             plt.tight_layout()
-             plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.svg", format="svg", bbox_inches="tight")
-             plt.close()
+            mem_instances = [name for name in MEMORY_PLOT_INSTANCES if name in complete_df.index]
+            workspace_mib = [algorithmic_workspace_mib(INSTANCE_SIZES[name]) for name in mem_instances]
+            # Graph storage approx 8 bytes per edge (CSR)
+            edge_bytes = 8
+            graph_storage_mib = [
+                (INSTANCE_SIZES[name] * (INSTANCE_SIZES[name] - 1) * edge_bytes) / (1024**2) for name in mem_instances
+            ]
+            x_positions = list(range(len(mem_instances)))
+            ax.plot(
+                x_positions,
+                workspace_mib,
+                "-o",
+                color="#CE412B",
+                label="Algorithm Workspace (MiB)",
+                linewidth=1.5,
+                markersize=5,
+            )
+            ax.plot(
+                x_positions,
+                graph_storage_mib,
+                "-s",
+                color="#3776AB",
+                label="Graph Storage (MiB)",
+                linewidth=1.5,
+                markersize=5,
+            )
+            for x_pos, mib in zip(x_positions, workspace_mib):
+                ax.annotate(
+                    f"{mib:.2f}",
+                    (x_pos, mib),
+                    textcoords="offset points",
+                    xytext=(0, 5),
+                    ha="center",
+                    fontsize=7,
+                )
+            for x_pos, mib in zip(x_positions, graph_storage_mib):
+                ax.annotate(
+                    f"{mib:.2f}",
+                    (x_pos, mib),
+                    textcoords="offset points",
+                    xytext=(0, 5),
+                    ha="center",
+                    fontsize=7,
+                )
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(mem_instances)
+            ax.set_xlabel("TSPLIB Instance (ordered by size)")
+            ax.set_ylabel("Memory (MiB)")
+            ax.set_title("Memory Footprint vs. Instance Size")
+            ax.grid(True, which="both", linestyle=":", alpha=0.5)
+            ax.legend(loc="upper left")
+            # dynamic top padding
+            max_val = max(max(workspace_mib, default=0), max(graph_storage_mib, default=0))
+            ax.set_ylim(bottom=0, top=max_val * 1.30)
+            plt.tight_layout()
+            plt.savefig(PLOTS_DIR / "get_nfi_memory_plot.svg", format="svg", bbox_inches="tight")
+            plt.close()
 
     if not df_divan.empty:
         # --- Sensitivity analysis figures ---
@@ -2151,13 +2122,7 @@ def package_and_download() -> None:
 
     print(f"Packaging artifacts into: {zip_path}...")
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        if has_materials:
-            for file in MATERIALS_DIR.glob("*"):
-                zip# f.write(file, arcname=f"materials/{file.name}")
-        if has_plots:
-            for file in PLOTS_DIR.glob("*"):
-                zip# f.write(file, arcname=f"plots/{file.name}")
+    # artifact packaging disabled
 
     print("Packaging complete.")
     print("Artifacts are saved in:")
