@@ -1440,17 +1440,20 @@ def parse_statistics_output(filepath: Path) -> tuple[pd.DataFrame, pd.DataFrame,
         df_g1[["Instance", "Opt", "NN_Cost", "FI_Cost", "CW_Cost", "GET_NFI_Cost"]].rename(
             columns={"NN_Cost": "NN", "FI_Cost": "FI", "CW_Cost": "CW", "GET_NFI_Cost": "GET-NFI"}
         ).to_csv(MATERIALS_DIR / "constructive_costs.csv", index=False)
+        # compute GET-NFI gap percentage
+        df_g1["GET_NFI_Gap_Percent"] = ((df_g1["GET_NFI_Cost"] - df_g1["Opt"]) / df_g1["Opt"]) * 100.0
         df_g1_gaps = df_g1[
-            ["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Time_MS"]
+            ["Instance", "NN_Gap_Percent", "FI_Gap_Percent", "CW_Gap_Percent", "GET_NFI_Gap_Percent", "GET_NFI_Time_MS"]
         ].rename(
             columns={
                 "NN_Gap_Percent": "NN (%)",
                 "FI_Gap_Percent": "FI (%)",
                 "CW_Gap_Percent": "CW (%)",
+                "GET_NFI_Gap_Percent": "GET-NFI (%)",
                 "GET_NFI_Time_MS": "Time (ms)",
             }
         )
-        for col in ("NN (%)", "FI (%)", "CW (%)", "Time (ms)"):
+        for col in ("NN (%)", "FI (%)", "CW (%)", "GET-NFI (%)", "Time (ms)"):
             df_g1_gaps[col] = df_g1_gaps[col].map(_format_2dp)
         df_g1_gaps.to_csv(MATERIALS_DIR / "constructive_gaps.csv", index=False)
 
