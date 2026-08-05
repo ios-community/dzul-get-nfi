@@ -341,6 +341,71 @@ def lint_script() -> None:
     """Run ``ruff check`` and ``ruff format --check`` on this script.
 
     Uses the project's ``pyproject.toml`` configuration for both tools.
+    """
+    print("Running ruff lint (strict ALL)...")
+    scripts_dir = REPO_ROOT / "scripts"
+    result = subprocess.run(
+        ["uvx", "ruff", "check", "--config", str(PYPROJECT_PATH), str(scripts_dir / "get_nfi_bench.py")],
+        cwd=scripts_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Ruff check failed:\n{result.stdout}\n{result.stderr}")
+        raise SystemExit(1)
+    print("Ruff check passed.")
+
+    result = subprocess.run(
+        [
+            "uvx",
+            "ruff",
+            "format",
+            "--check",
+            "--config",
+            str(PYPROJECT_PATH),
+            str(scripts_dir / "get_nfi_bench.py"),
+        ],
+        cwd=scripts_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f"Ruff format check failed:\n{result.stdout}\n{result.stderr}")
+        raise SystemExit(1)
+    print("Ruff format check passed.")
+
+
+def lint_all_scripts() -> None:
+    """Run ``ruff check`` and ``ruff format --check`` on all scripts in the scripts directory."""
+    scripts_dir = REPO_ROOT / "scripts"
+    for fname in ["get_nfi_bench.py", "plot_materials.py"]:
+        print(f"Checking {fname}...")
+        result = subprocess.run(
+            ["uvx", "ruff", "check", "--config", str(PYPROJECT_PATH), str(scripts_dir / fname)],
+            cwd=scripts_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"Ruff check failed for {fname}:\n{result.stdout}\n{result.stderr}")
+            raise SystemExit(1)
+        result = subprocess.run(
+            ["uvx", "ruff", "format", "--check", "--config", str(PYPROJECT_PATH), str(scripts_dir / fname)],
+            cwd=scripts_dir,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"Ruff format check failed for {fname}:\n{result.stdout}\n{result.stderr}")
+            raise SystemExit(1)
+    print("All scripts passed ruff lint and format checks.")
+    """Run ``ruff check`` and ``ruff format --check`` on this script.
+
+    Uses the project's ``pyproject.toml`` configuration for both tools.
 
     Raises:
         SystemExit: If either the lint or format check fails.
@@ -2153,11 +2218,17 @@ def main() -> None:
         action="store_true",
         help="Skip experiments; only regenerate plots/tables from existing results",
     )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="Skip all plotting steps (default false)",
+    )
     args = parser.parse_args()
 
     if args.plots:
         setup_environment()
-        generate_plots_and_tables()
+        if not args.no_plot:
+            generate_plots_and_tables()
         publish_to_paper()
         package_and_download()
         return
@@ -2178,7 +2249,8 @@ def main() -> None:
     run_advanced_analyses()
 
     # Generate all outputs
-    generate_plots_and_tables()
+    if not args.no_plot:
+        generate_plots_and_tables()
     publish_to_paper()
     package_and_download()
 
